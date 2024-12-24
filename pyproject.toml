@@ -1,0 +1,79 @@
+[project]
+name = "DeepHall"
+version = "0.1.0"
+description = "Simulating the fractional quantum Hall effect with neural network variational Monte Carlo."
+authors = [
+    {name = "Yubing Qian", email="qyb@bytedance.com"}
+]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Environment :: GPU :: NVIDIA CUDA :: 12",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "jax==0.4.35",  # JAX 0.4.35 is the last version supported by kfac_jax 0.0.6
+    "numpy~=2.0",
+    "flax~=0.10.2",
+    "kfac_jax==0.0.6",
+    "omegaconf~=2.3",
+    "universal_pathlib~=0.2.2",
+]
+
+[project.scripts]
+deephall = "deephall.train:cli"
+
+[project.entry-points."netobs.cli.expansions"]
+deephall = "deephall.netobs_bridge.cli_extend:expansions"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+    "ruff",
+    "mypy",
+    "pydoclint",
+    "pytest",
+]
+cuda12 = ["jax[cuda12]==0.4.35"]
+cuda12_local = ["jax[cuda12_local]==0.4.35"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+preview = true
+select = [
+    "F", "E", "W", # pyflakes and pycodestyle
+    "D",           # pydocstyle
+    "G", "LOG",    # logging rules
+    "RUF",         # ruff rules
+    "I",           # isort
+    "CPY",         # copyright header
+    "ERA",         # commented code
+    "FURB", "UP",  # modernize code
+    "SIM", "C90",  # simplify code
+    "PLW", "PLE",  # pylint rules
+]
+ignore = ["D1"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# TODO: migrate to Ruff when all pydoclint rules are implemented
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-docstring = false
+check-return-types = false
+check-yield-types = false
