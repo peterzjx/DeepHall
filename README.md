@@ -75,6 +75,46 @@ DeepHall contains a `netobs_bridge` module to calculate the pair correlation fun
 netobs deephall unused deephall@overlap --with steps=50 --net-restore save_path/ckpt_000099.npz --ckpt save_path/overlap
 ```
 
+## Adding a New Neural Network Wavefunction
+
+To add a custom neural network wavefunction, follow these steps:
+
+### Step 1: Create the Network Implementation 
+
+Add a new file in the `deephall/networks/` directory, e.g., `deephall/networks/mynet.py`. You can refer to the existing implementation in `deephall/networks/psiformer.py` as a template.
+     
+### Step 2: Configure the Network
+
+Update the configuration file `deephall/config.py`:
+- Define a new dataclass. Create a dataclass `MyNet` to store the configurations specific to your network. For example:
+  ```python
+  @dataclass
+  class MyNet:
+      hidden_dim: int = 128
+      num_layers: int = 3
+  ```
+- Add the dataclass to the `Network` config. Include your dataclass in the `Network` configuration by adding a line like:
+  ```python
+  
+  @dataclass
+  class Network:
+      ...
+      mynet: MyNet = field(default_factory=MyNet)
+  ```
+- Extend the `NetworkType` enum. Add a new entry in the `NetworkType` enum to identify your network, e.g.:
+  ```python
+  class NetworkType(StrEnum):
+      ...
+      mynet = "mynet"
+  ```
+### Step 3: Register the Network
+
+Add a construction function in `deephall/networks/__init__.py`. Register your network by adding a conditional block to instantiate it based on the `NetworkType`. For example:
+ ```python
+if network.type == NetworkType.mynet:
+    return MyNet(network.mynet.hidden_dim, network.mynet.num_layers)
+```
+
 ## Citing Our Paper
 
 If you use this code in your work, please cite the following paper:
