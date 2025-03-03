@@ -52,7 +52,7 @@ class Laughlin(nn.Module):
 
     def __call__(self, electrons):
         orbitals = self.orbitals(electrons)
-        signs, logdets = jnp.linalg.slogdet(orbitals)
+        signs, logdets = jnp.linalg.slogdet(orbitals)  # Jain P152
         logmax = jnp.max(logdets)  # logsumexp trick
         return jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax
 
