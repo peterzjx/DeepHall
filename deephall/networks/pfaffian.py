@@ -27,6 +27,14 @@ class PfaffianLayers(nn.Module):
         return h_one
 
 class Pfaffian(nn.Module):
+    nspins: tuple[int, int]
+    Q: float
+    ndets: int
+    num_heads: int
+    heads_dim: int
+    num_layers: int
+    orbital_type: OrbitalType
+    
     def __init__(self):
         self.net = PfaffianLayers(num_heads=1, heads_dim=1, num_layers=1)
 

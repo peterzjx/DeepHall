@@ -82,6 +82,7 @@ class System:
 class NetworkType(StrEnum):
     psiformer = "psiformer"
     laughlin = "laughlin"
+    pfaffian = "pfaffian"
 
 
 class OrbitalType(StrEnum):
