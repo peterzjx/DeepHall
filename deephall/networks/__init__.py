@@ -28,8 +28,15 @@ def make_network(system: System, network: Network) -> nn.Module:
         )
     if network.type == NetworkType.pfaffian:
         return Pfaffian(
-            flux=system.flux, nspins=system.nspins, excitation_lz=system.lz_center
+            Q=Q,
+            nspins=system.nspins,
+            ndets=network.psiformer.determinants,
+            num_heads=network.psiformer.num_heads,
+            num_layers=network.psiformer.num_layers,
+            heads_dim=network.psiformer.heads_dim,
+            orbital_type=network.orbital,
         )
+    
     if network.type == NetworkType.psiformer:
         return Psiformer(
             Q=Q,

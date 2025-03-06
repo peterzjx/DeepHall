@@ -91,6 +91,13 @@ class OrbitalType(StrEnum):
 
 
 @dataclass
+class PfaffianNetwork:
+    num_heads: int = 4
+    heads_dim: int = 64
+    num_layers: int = 2
+
+
+@dataclass
 class PsiformerNetwork:
     num_heads: int = 4
     heads_dim: int = 64
@@ -101,8 +108,10 @@ class PsiformerNetwork:
 @dataclass
 class Network:
     type: NetworkType = NetworkType.psiformer
+    # type: NetworkType = NetworkType.pfaffian
     orbital: OrbitalType = OrbitalType.full
     psiformer: PsiformerNetwork = field(default_factory=PsiformerNetwork)
+    pfaffian: PfaffianNetwork = field(default_factory=PfaffianNetwork)
 
 
 @dataclass
