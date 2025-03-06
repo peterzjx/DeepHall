@@ -122,13 +122,12 @@ class MCMC:
     width: float = 0.1
     "The std dev for gaussian move."
 
-    burn_in: int = 200
+    burn_in: int = 500
     """MCMC burn in steps to run before training.
 
     It's actually `mcmc.burn_in * mcmc.steps` number of steps.
     """
-
-    adapt_frequency: int = 100
+    adapt_frequency: int = 200
     "Number of steps after which to update the adaptive MCMC step size."
 
 
@@ -139,7 +138,7 @@ class LearningRate:
     The formula is rate * (1.0 / (1.0 + (t / delay)) ** decay
     """
 
-    rate: float = 0.005
+    rate: float = 0.001
     decay: float = 1.0
     delay: float = 2000.0
 

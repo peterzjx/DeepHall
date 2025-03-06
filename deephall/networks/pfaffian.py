@@ -16,11 +16,25 @@ class PairwiseNetwork(nn.Module):
     @nn.compact
     def __call__(self, rij):
         """Forward pass: Input shape [batch, Ne, Ne, 4] -> Output [batch, Ne, Ne, 2]"""
-        x = nn.Dense(self.hidden_dim)(rij)
-        x = nn.softplus(x)
-        x = nn.Dense(self.hidden_dim)(x)
-        x = nn.softplus(x)
-        x = nn.Dense(2)(x)  # Output two values (real & imag)
+        # x = nn.Dense(self.hidden_dim)(rij)
+        # x = nn.softplus(x)
+        # x = nn.Dense(self.hidden_dim)(x)
+        # x = nn.softplus(x)
+        # x = nn.Dense(2)(x)  # Output two values (real & imag)
+
+        x = nn.Dense(self.hidden_dim, use_bias=True)(rij)
+        x = nn.sigmoid(x)  # Smooth activation
+        
+        # Second hidden layer
+        x = nn.Dense(self.hidden_dim, use_bias=True)(x)
+        x = nn.sigmoid(x)
+        
+        # Third hidden layer
+        x = nn.Dense(self.hidden_dim, use_bias=True)(x)
+        x = nn.sigmoid(x)
+
+        # Output layer (2 real values → complex number)
+        x = nn.Dense(2, use_bias=True)(x)
         return x[..., 0] + 1j * x[..., 1]  # Convert to complex
 
 def extract_pairs(electron):
@@ -36,7 +50,7 @@ def extract_pairs(electron):
     uj = u[idx_j]  # Shape: [Ne, 2]
     vj = v[idx_j]  # Shape: [Ne, 2]
 
-    rij = jnp.concatenate([ui, vi, uj, vj], axis=-1)  # Shape: [batch, num_pairs, 4]
+    rij = jnp.concatenate([ui, vi, uj, vj, jnp.conj(ui), jnp.conj(vi), jnp.conj(uj), jnp.conj(vj)], axis=-1)  # Shape: [batch, num_pairs, 4]
     return rij    
 
 def original_pfaf(electron):
