@@ -9,73 +9,58 @@ from deephall.config import OrbitalType
 
 from .blocks import Jastrow, Orbitals
 
-class SelfAttentionNetwork(nn.Module):
-    hidden_dim: int  # Number of hidden units
+class PairwiseNetwork(nn.Module):
+    """Feedforward NN that maps (ri, rj) to a complex number."""
+    hidden_dim: int = 64  # Adjustable hidden layer size
 
     @nn.compact
-    def __call__(self, hi, hj, context):
-        x = jnp.concatenate([hi, hj, context], axis=-1)
+    def __call__(self, rij):
+        """Forward pass: Input shape [batch, Ne, Ne, 4] -> Output [batch, Ne, Ne, 2]"""
+        x = nn.Dense(self.hidden_dim)(rij)
+        x = nn.softplus(x)
         x = nn.Dense(self.hidden_dim)(x)
-        x = nn.relu(x)
-        x = nn.Dense(self.hidden_dim)(x)
-        x = nn.relu(x)
-        x = nn.Dense(1)(x)  # Output a single value
-        return x
-class PfaffianLayers(nn.Module):
-    num_heads: int
-    heads_dim: int
-    num_layers: int
+        x = nn.softplus(x)
+        x = nn.Dense(2)(x)  # Output two values (real & imag)
+        return x[..., 0] + 1j * x[..., 1]  # Convert to complex
 
-    @nn.compact
-    def __call__(self, electrons: jnp.ndarray, spins: jnp.ndarray):
-        theta, phi = electrons[..., 0], electrons[..., 1]
-        # u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]
-        # v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]
-        h_one = self.input_feature(theta, phi, spins)
-        attention_dim = self.num_heads * self.heads_dim
-        h_one = nn.Dense(attention_dim, use_bias=False)(h_one)
-        for _ in range(self.num_layers):
-            attn_out = nn.MultiHeadAttention(num_heads=self.num_heads)(h_one)
-            h_one += nn.Dense(attention_dim, use_bias=False)(attn_out)
-            h_one = nn.LayerNorm(epsilon=1e-5)(h_one)
-            h_one += nn.tanh(nn.Dense(attention_dim)(h_one))
-            h_one = nn.LayerNorm(epsilon=1e-5)(h_one)
-        return h_one
+def extract_pairs(electron):
+    """Generate unordered (ri, rj) pairs from electron coordinates."""
+    theta, phi = electron[..., 0], electron[..., 1]
+    u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [..., N, 1]
+    v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [..., N, 1]
+    Ne, _ = electron.shape
+    # idx_i, idx_j = jnp.triu_indices(Ne)  # Get indices for i ≤ j to enforce ordering
+    idx_i, idx_j = jnp.meshgrid(jnp.arange(Ne), jnp.arange(Ne), indexing='ij')
+    # Gather the corresponding (ri, rj) pairs
+    # ri = electron[idx_i, :]  # Shape: [Ne, 2]
+    # rj = electron[idx_j, :]  # Shape: [Ne, 2]
+    ui = u[idx_i]  # Shape: [Ne, 2]
+    vi = v[idx_i]  # Shape: [Ne, 2]
+    uj = u[idx_j]  # Shape: [Ne, 2]
+    vj = v[idx_j]  # Shape: [Ne, 2]
 
-    def input_feature(self, theta: jnp.ndarray, phi: jnp.ndarray, spins: jnp.ndarray):
-        return jnp.stack(
-            [
-                jnp.cos(theta),
-                jnp.sin(theta) * jnp.cos(phi),
-                jnp.sin(theta) * jnp.sin(phi),
-                spins,
-            ],
-            axis=-1,
-        )
-def compute_n_matrix(electrons, model, params):
-    """Computes the n_ij matrix using a self-attention network."""
-    theta, phi = electrons[..., 0], electrons[..., 1]
-    u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]
-    v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]
+    rij = jnp.concatenate([ui, vi, uj, vj], axis=-1)  # Shape: [batch, num_pairs, 4]
+    return rij    
 
-    # Convert spinors to real-valued features
-    h = jnp.concatenate([u.real, u.imag, v.real, v.imag], axis=-1)  # Shape: (N, 4)
+def original_pfaf(electron):
+    """Generate unordered (ri, rj) pairs from electron coordinates."""
+    theta, phi = electron[..., 0], electron[..., 1]
+    u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [..., N, 1]
+    v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [..., N, 1]
+    Ne, _ = electron.shape
+    # # idx_i, idx_j = jnp.triu_indices(Ne)  # Get indices for i ≤ j to enforce ordering
+    # idx_i, idx_j = jnp.meshgrid(jnp.arange(Ne), jnp.arange(Ne), indexing='ij')
+    # # Gather the corresponding (ri, rj) pairs
+    # ui = u[idx_i]  # Shape: [Ne, 2]
+    # vi = v[idx_i]  # Shape: [Ne, 2]
+    # uj = u[idx_j]  # Shape: [Ne, 2]
+    # vj = v[idx_j]  # Shape: [Ne, 2]
 
-    N = h.shape[0]
-    n_matrix = jnp.zeros((N, N))
-
-    for i in range(N):
-        for j in range(N):
-            if i == j:
-                continue  # Avoid self-interaction
-
-            # Compute context as mean over other electrons
-            context = jnp.mean(jnp.delete(h, [i, j], axis=0), axis=0) if N > 2 else jnp.zeros_like(h[0])
-
-            # Compute attention score
-            n_matrix = n_matrix.at[i, j].set(model.apply(params, h[i], h[j], context))
-
-    return n_matrix
+    # pf_ij = jnp.concatenate(1.0 / (ui*vj - uj*vi), axis=-1)  # Shape: [batch, num_pairs, 4]
+    # # pf_ij = jnp.nan_to_num(pf_ij, nan=0, posinf=0, neginf=0)
+    # return pf_ij    
+    pf_ij = ( 1 - jnp.eye(Ne)) / (u * v[:, 0] - u[:, 0] * v + jnp.eye(u.shape[0]) + 1e-10)  # [..., N, N]
+    return pf_ij
 
 class Pfaffian(nn.Module):
     nspins: tuple[int, int]
@@ -90,22 +75,19 @@ class Pfaffian(nn.Module):
     def __call__(self, electrons: jnp.ndarray):
         theta, phi = electrons[..., 0], electrons[..., 1]
         spins = jnp.array([1] * self.nspins[0] + [-1] * self.nspins[1])
-        u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]
-        v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]
-        h = jnp.concatenate([u.real, u.imag, v.real, v.imag], axis=-1)  # Shape: (N, 4)
-        n_ij = PfaffianLayers(
-            num_heads=self.num_heads,
-            num_layers=self.num_layers,
-            heads_dim=self.heads_dim,
-        )(electrons, spins)
-        # Antisymmetrize n_ij to create g_ij
+        
+        r_ij = extract_pairs(electron=electrons)
+        model = PairwiseNetwork()
+        params = model.init(jax.random.PRNGKey(42), r_ij)  # Initialize model
+        n_ij = model.apply(params, r_ij)  # Forward pass
         g_ij = (n_ij - n_ij.T) / 2  # Make it antisymmetric
+        # g_ij = original_pfaf(electron=electrons)
         pfaffian = jnp.sqrt(jnp.linalg.det(g_ij))
-        return pfaffian
-        # return pfaffian * self.orbitals(electrons)
+        # print(pfaffian * self.flux_attachment(electrons))
+        return jnp.log(self.flux_attachment(electrons) * pfaffian)
 
     @nn.compact
-    def orbitals(self, electrons):
+    def flux_attachment(self, electrons):
         """
             electrons: [..., N, 2]
         """
@@ -119,7 +101,7 @@ class Pfaffian(nn.Module):
         # Pfaffian wavefunction : Pf[G(vi, ui)] * Prod_{i<j}(zi-zj)**2
         #                       = Pf[G(vi, ui)] * Prod_{i,j}(element_ij)
 
-        orbitals = jnp.prod(element, axis=-1, keepdims=True)  # [..., N, 1]   
+        orbitals = jnp.prod(element, keepdims=False)  # [..., N, 1]   
         # Prod_j (zi-zj), i!=j
     
         return orbitals
