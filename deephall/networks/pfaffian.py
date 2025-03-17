@@ -38,8 +38,8 @@ def extract_pairs(electron):
     D = length(features: ui, vi, ...)
     """
     theta, phi = electron[..., 0], electron[..., 1]
-    # u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [N, 1]
-    # v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [N, 1]
+    u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [N, 1]
+    v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [N, 1]
     Ne, _ = electron.shape
     idx_i, idx_j = jnp.meshgrid(jnp.arange(Ne), jnp.arange(Ne), indexing='ij')
 
@@ -49,10 +49,17 @@ def extract_pairs(electron):
     thetaj = jnp.reshape(theta[idx_j], [-1])  # Shape: [Ne * Ne]
     phij = jnp.reshape(phi[idx_j], [-1])  # Shape: [Ne * Ne]
 
-    rij = jnp.stack([thetai, phii, thetaj, phij], axis=-1)  # [Ne*Ne, D]
-    print("rij", rij.shape)
+    ui = jnp.reshape(u[idx_i], [-1])
+    vi = jnp.reshape(v[idx_i], [-1])
+    zi = ui / vi
+    uj = jnp.reshape(u[idx_j], [-1])
+    vj = jnp.reshape(v[idx_j], [-1])
+    zj = uj / vj
+
+    # rij = jnp.stack([thetai, phii, thetaj, phij], axis=-1)  # [Ne*Ne, D]
+    rij = jnp.stack([zi - zj, (zi - zj)**2, 1.0 / (1e-8 + zi - zj)], axis=-1)  # [Ne*Ne, D]
     
-    return rij    
+    return rij, zi - zj, vi * vj, ui*vj-uj*vi
 
 def original_pfaf(electron):
     """Generate unordered (ri, rj) pairs from electron coordinates."""
@@ -76,15 +83,20 @@ class Pfaffian(nn.Module):
     def __call__(self, electrons: jnp.ndarray):
         # Using NN for wfn
         Ne = electrons.shape[0]
-        pair_feature = extract_pairs(electron=electrons)
+        pair_feature, zij,  vivj, uivj_ujvi = extract_pairs(electron=electrons)
         model = PairwiseNetwork()
         params = model.init(jax.random.PRNGKey(42), pair_feature)  # Initialize model
         model_output = model.apply(params, pair_feature)  # Forward pass
         n_ij = jnp.reshape(model_output, [Ne, Ne])
+        zij = jnp.reshape(zij, [Ne, Ne])
+        vivj = jnp.reshape(vivj, [Ne, Ne])
+        uivj_ujvi = jnp.reshape(uivj_ujvi, [Ne, Ne])
         g_ij = (n_ij - n_ij.T) / 2  # Make it antisymmetric
+        print(pair_feature.shape, g_ij.shape)
+        pfaffian = jnp.sqrt(jnp.linalg.det(1.0 /(1e-10 + uivj_ujvi)))
         # Using original Moore-Read Pfaffian for benchmarking
-        # g_ij = original_pfaf(electron=electrons)
-        pfaffian = jnp.sqrt(jnp.linalg.det(g_ij))
+        # pfaf_ij = original_pfaf(electron=electrons)
+        # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
         # print(pfaffian * self.flux_attachment(electrons))
         return jnp.log(self.flux_attachment(electrons) * pfaffian)
 
