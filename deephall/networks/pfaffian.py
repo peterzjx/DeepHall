@@ -9,6 +9,7 @@ from deephall.config import OrbitalType
 
 from .blocks import Jastrow, Orbitals
 
+
 class PairwiseNetwork(nn.Module):
     """Feedforward NN that maps (ri, rj) to a complex number."""
     hidden_dim: int = 64  # Adjustable hidden layer size
@@ -17,19 +18,20 @@ class PairwiseNetwork(nn.Module):
     def __call__(self, rij):
         """Forward pass: Input shape [batch, N_pairs, D] -> Output [batch, N_pairs, 2]"""
         x = nn.Dense(self.hidden_dim, use_bias=True)(rij)
-        x = nn.sigmoid(x)  # Smooth activation
-        
+        x = nn.softplus(x)  # Smooth activation
+
         # Second hidden layer
         x = nn.Dense(self.hidden_dim, use_bias=True)(x)
-        x = nn.sigmoid(x)
-        
+        x = nn.softplus(x)
+
         # Third hidden layer
         x = nn.Dense(self.hidden_dim, use_bias=True)(x)
-        x = nn.sigmoid(x)
+        x = nn.softplus(x)
 
         # Output layer
         x = nn.Dense(2, use_bias=True)(x)
         return x[..., 0] + 1j * x[..., 1]
+
 
 def extract_pairs(electron):
     """
@@ -48,27 +50,46 @@ def extract_pairs(electron):
     phii = jnp.reshape(phi[idx_i], [-1])  # Shape: [Ne * Ne]
     thetaj = jnp.reshape(theta[idx_j], [-1])  # Shape: [Ne * Ne]
     phij = jnp.reshape(phi[idx_j], [-1])  # Shape: [Ne * Ne]
-
-    ui = jnp.reshape(u[idx_i], [-1])
-    vi = jnp.reshape(v[idx_i], [-1])
+    ui = u[idx_i, 0]
+    vi = v[idx_i, 0]
+    uj = u[idx_j, 0]
+    vj = v[idx_j, 0]
     zi = ui / vi
-    uj = jnp.reshape(u[idx_j], [-1])
-    vj = jnp.reshape(v[idx_j], [-1])
     zj = uj / vj
+    zij = (zi - zj) * (1 - jnp.eye(Ne))
+    # print(zi.shape, zj.shape, zij.shape)
+    ui = jnp.reshape(ui, [-1])
+    vi = jnp.reshape(vi, [-1])
+    zi = jnp.reshape(zi, [-1])
 
-    # rij = jnp.stack([thetai, phii, thetaj, phij], axis=-1)  # [Ne*Ne, D]
-    rij = jnp.stack([zi - zj, (zi - zj)**2, 1.0 / (1e-8 + zi - zj)], axis=-1)  # [Ne*Ne, D]
-    
-    return rij, zi - zj, vi * vj, ui*vj-uj*vi
+    uj = jnp.reshape(uj, [-1])
+    vj = jnp.reshape(vj, [-1])
+    zj = jnp.reshape(zj, [-1])
+
+    zij = jnp.reshape(zij, [-1])
+    rhoij = jnp.abs(zij)
+    angij = jnp.angle(zij)
+    # rij = jnp.expand_dims(jnp.abs(zij), axis=-1)
+    # angij = jnp.expand_dims(jnp.angle(zij), axis=-1)
+
+    feature = jnp.stack([thetai, phii, thetaj, phij], axis=-1)  # [Ne*Ne, D]
+    # feature = jnp.stack([rhoij, angij], axis=-1)  # [Ne*Ne, D]
+    rho_feature = jnp.stack([rhoij, rhoij**2, rhoij**3], axis=-1)  # [Ne*Ne, D]
+    ang_feature = jnp.stack([angij, angij**2, angij**3], axis=-1)  # [Ne*Ne, D]
+    print(feature.shape, rho_feature.shape, ang_feature.shape)
+    return feature, rho_feature, ang_feature, zij, vi*vj, ui*vj-uj*vi, rhoij, angij
+
 
 def original_pfaf(electron):
     """Generate unordered (ri, rj) pairs from electron coordinates."""
     theta, phi = electron[..., 0], electron[..., 1]
     u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [..., N, 1]
     v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [..., N, 1]
-    Ne, _ = electron.shape   
-    pf_ij = ( 1 - jnp.eye(Ne)) / (u * v[:, 0] - u[:, 0] * v + jnp.eye(u.shape[0]) + 1e-10)  # [..., N, N]
+    Ne, _ = electron.shape
+    pf_ij = (1 - jnp.eye(Ne)) / (u *
+                                 v[:, 0] - u[:, 0] * v + jnp.eye(u.shape[0]) + 1e-10)  # [..., N, N]
     return pf_ij
+
 
 class Pfaffian(nn.Module):
     nspins: tuple[int, int]
@@ -83,17 +104,35 @@ class Pfaffian(nn.Module):
     def __call__(self, electrons: jnp.ndarray):
         # Using NN for wfn
         Ne = electrons.shape[0]
-        pair_feature, zij,  vivj, uivj_ujvi = extract_pairs(electron=electrons)
-        model = PairwiseNetwork()
-        params = model.init(jax.random.PRNGKey(42), pair_feature)  # Initialize model
-        model_output = model.apply(params, pair_feature)  # Forward pass
-        n_ij = jnp.reshape(model_output, [Ne, Ne])
-        zij = jnp.reshape(zij, [Ne, Ne])
+        pair_feature, rho_feature, ang_feature, zij,  vivj, uivj_ujvi, rhoij, angij = extract_pairs(electron=electrons)
+        rho_model = PairwiseNetwork()
+        rho_params = rho_model.init(jax.random.PRNGKey(
+            42), rho_feature)  # Initialize model
+        rho_model_output = rho_model.apply(rho_params, rho_feature)  # Forward pass
+        g_ij = jnp.reshape(rho_model_output, [Ne, Ne])
+
+        ang_model = PairwiseNetwork()
+        ang_params = ang_model.init(jax.random.PRNGKey(
+            42), ang_feature)  # Initialize model
+        ang_model_output = rho_model.apply(ang_params, ang_feature)  # Forward pass
+        phi_ang = jnp.reshape(ang_model_output, [Ne, Ne])
+        
         vivj = jnp.reshape(vivj, [Ne, Ne])
-        uivj_ujvi = jnp.reshape(uivj_ujvi, [Ne, Ne])
-        g_ij = (n_ij - n_ij.T) / 2  # Make it antisymmetric
-        print(pair_feature.shape, g_ij.shape)
-        pfaffian = jnp.sqrt(jnp.linalg.det(1.0 /(1e-10 + uivj_ujvi)))
+
+        rhoij = jnp.reshape(rhoij, [Ne, Ne])
+        angij = jnp.reshape(angij, [Ne, Ne])
+
+        # model = PairwiseNetwork()
+        # params = model.init(jax.random.PRNGKey(
+        #     42), pair_feature)  # Initialize model
+        # model_output = model.apply(params, pair_feature)  # Forward pass
+        # n_ij = jnp.reshape(model_output, [Ne, Ne])
+        # zij = jnp.reshape(zij, [Ne, Ne])
+        # vivj = jnp.reshape(vivj, [Ne, Ne])
+        # uivj_ujvi = jnp.reshape(uivj_ujvi, [Ne, Ne])
+        # g_ij = (n_ij - n_ij.T) / 2  # Make it antisymmetric
+        # pfaffian = jnp.sqrt(jnp.linalg.det(( 1 - jnp.eye(Ne))  /(1e-10 + zij * vivj)))
+        pfaffian = jnp.sqrt(jnp.linalg.det( ( 1 - jnp.eye(Ne) /(1e-10 + rhoij * vivj * 1))))
         # Using original Moore-Read Pfaffian for benchmarking
         # pfaf_ij = original_pfaf(electron=electrons)
         # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
@@ -106,16 +145,19 @@ class Pfaffian(nn.Module):
             electrons: [..., N, 2]
         """
         theta, phi = electrons[..., 0], electrons[..., 1]
-        
-        u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [..., N, 1]
-        v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [..., N, 1]
 
-        element = u * v[:, 0] - u[:, 0] * v + jnp.eye(u.shape[0])  # [..., N, N]
+        u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi)
+             )[..., None]  # [..., N, 1]
+        v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi)
+             )[..., None]  # [..., N, 1]
+
+        element = u * v[:, 0] - u[:, 0] * v + \
+            jnp.eye(u.shape[0])  # [..., N, N]
         # uivj - ujvi + δij == (zi-zj) for i!=j, 1 for i==j
         # Pfaffian wavefunction : Pf[G(vi, ui)] * Prod_{i<j}(zi-zj)**2
         #                       = Pf[G(vi, ui)] * Prod_{i,j}(element_ij)
 
-        orbitals = jnp.prod(element, keepdims=False)  # [..., N, 1]   
+        orbitals = jnp.prod(element, keepdims=False)  # [..., N, 1]
         # Prod_j (zi-zj), i!=j
-    
+
         return orbitals
