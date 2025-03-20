@@ -27,7 +27,8 @@ from jax import numpy as jnp
 from deephall.config import OrbitalType
 
 from .blocks import Jastrow, Orbitals
-
+# import jax
+# jax.config.update("jax_debug_nans", True)
 
 class PsiformerLayers(nn.Module):
     num_heads: int
@@ -71,7 +72,9 @@ class Psiformer(nn.Module):
 
     def __call__(self, electrons):
         orbitals = self.orbitals(electrons)
+        
         signs, logdets = jnp.linalg.slogdet(orbitals)
+        print(orbitals.shape, logdets.shape)
         logmax = jnp.max(logdets)  # logsumexp trick
         return jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax
 

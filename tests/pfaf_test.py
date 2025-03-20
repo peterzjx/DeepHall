@@ -1,5 +1,7 @@
 from deephall import Config, train
 from deephall.config import Network, NetworkType, System,PsiformerNetwork
+import jax
+# jax.config.update("jax_debug_nans", True)
 
 
 

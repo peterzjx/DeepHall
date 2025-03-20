@@ -10,6 +10,8 @@ from deephall.config import OrbitalType
 from .blocks import Jastrow, Orbitals
 
 
+
+
 class PfafformerLayers(nn.Module):
     num_heads: int
     heads_dim: int
@@ -40,58 +42,6 @@ class PfafformerLayers(nn.Module):
         )
 
 
-class Pfafformer(nn.Module):
-    Q: float
-    ndets: int
-    num_heads: int
-    heads_dim: int
-    num_layers: int
-    orbital_type: OrbitalType
-
-    def __call__(self, electrons):
-        orbitals = self.orbitals(electrons)
-        signs, logdets = jnp.linalg.slogdet(orbitals)
-        logmax = jnp.max(logdets)  # logsumexp trick
-        return jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax
-
-    @nn.compact
-    def orbitals(self, electrons):
-        theta, phi = electrons[..., 0], electrons[..., 1]
-
-        h_one = PfafformerLayers(
-            num_heads=self.num_heads,
-            num_layers=self.num_layers,
-            heads_dim=self.heads_dim,
-        )(electrons)
-        orbitals = Orbitals(
-            type=self.orbital_type, Q=self.Q, nspins= (2, 0), ndets=self.ndets
-        )(h_one, theta, phi)
-        jastrow = Jastrow((2, 0))(electrons)
-        return jnp.exp(jastrow / 2) * orbitals
-
-class PairwiseNetwork(nn.Module):
-    """Feedforward NN that maps (ri, rj) to a complex number."""
-    hidden_dim: int = 64  # Adjustable hidden layer size
-
-    @nn.compact
-    def __call__(self, rij):
-        """Forward pass: Input shape [batch, N_pairs, D] -> Output [batch, N_pairs, 2]"""
-        x = nn.Dense(self.hidden_dim, use_bias=True)(rij)
-        x = nn.softplus(x)  # Smooth activation
-
-        # Second hidden layer
-        x = nn.Dense(self.hidden_dim, use_bias=True)(x)
-        x = nn.softplus(x)
-
-        # Third hidden layer
-        x = nn.Dense(self.hidden_dim, use_bias=True)(x)
-        x = nn.softplus(x)
-
-        # Output layer
-        x = nn.Dense(2, use_bias=True)(x)
-        return x[..., 0] + 1j * x[..., 1]
-
-
 def extract_pairs(electron):
     """
     Generate unordered (ri, rj) pairs from electron coordinates.
@@ -99,44 +49,33 @@ def extract_pairs(electron):
     D = length(features: ui, vi, ...)
     """
     theta, phi = electron[..., 0], electron[..., 1]
-    u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]  # [N, 1]
-    v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]  # [N, 1]
     Ne, _ = electron.shape
     idx_i, idx_j = jnp.meshgrid(jnp.arange(Ne), jnp.arange(Ne), indexing='ij')
+    
 
     # Gather the corresponding (ri, rj) pairs
-    thetai = jnp.reshape(theta[idx_i], [-1])  # Shape: [Ne * Ne]
-    phii = jnp.reshape(phi[idx_i], [-1])  # Shape: [Ne * Ne]
-    thetaj = jnp.reshape(theta[idx_j], [-1])  # Shape: [Ne * Ne]
-    phij = jnp.reshape(phi[idx_j], [-1])  # Shape: [Ne * Ne]
-    ui = u[idx_i, 0]
-    vi = v[idx_i, 0]
-    uj = u[idx_j, 0]
-    vj = v[idx_j, 0]
-    zi = ui / vi
-    zj = uj / vj
-    zij = (zi - zj) * (1 - jnp.eye(Ne))
-    # print(zi.shape, zj.shape, zij.shape)
-    ui = jnp.reshape(ui, [-1])
-    vi = jnp.reshape(vi, [-1])
-    zi = jnp.reshape(zi, [-1])
+    # thetai = jnp.reshape(theta[idx_i], [-1])  # Shape: [Ne * Ne]
+    # phii = jnp.reshape(phi[idx_i], [-1])  # Shape: [Ne * Ne]
+    # thetaj = jnp.reshape(theta[idx_j], [-1])  # Shape: [Ne * Ne]
+    # phij = jnp.reshape(phi[idx_j], [-1])  # Shape: [Ne * Ne]
+    
+    thetai = theta[idx_i]  # Shape: [Ne * Ne]
+    phii = phi[idx_i] # Shape: [Ne * Ne]
+    thetaj = theta[idx_j] # Shape: [Ne * Ne]
+    phij = phi[idx_j] # Shape: [Ne * Ne]
+    
+    
+    upper_i, upper_j = jnp.triu_indices(thetai.shape[0], k=1)
+    upper_theta_i = thetai[upper_i, upper_j]
+    upper_theta_j = thetaj[upper_i, upper_j]
+    upper_phi_i = phii[upper_i, upper_j]
+    upper_phi_j = phij[upper_i, upper_j]
 
-    uj = jnp.reshape(uj, [-1])
-    vj = jnp.reshape(vj, [-1])
-    zj = jnp.reshape(zj, [-1])
-
-    zij = jnp.reshape(zij, [-1])
-    rhoij = jnp.abs(zij)
-    angij = jnp.angle(zij)
-    # rij = jnp.expand_dims(jnp.abs(zij), axis=-1)
-    # angij = jnp.expand_dims(jnp.angle(zij), axis=-1)
-
-    feature = jnp.stack([thetai, phii, thetaj, phij], axis=-1)  # [Ne*Ne, D]
-    # feature = jnp.stack([rhoij, angij], axis=-1)  # [Ne*Ne, D]
-    rho_feature = jnp.stack([rhoij, rhoij**2, rhoij**3], axis=-1)  # [Ne*Ne, D]
-    ang_feature = jnp.stack([angij, angij**2, angij**3], axis=-1)  # [Ne*Ne, D]
-    print(feature.shape, rho_feature.shape, ang_feature.shape)
-    return feature, rho_feature, ang_feature, zij, vi*vj, ui*vj-uj*vi, rhoij, angij
+    theta_pair = jnp.stack([upper_theta_i, upper_theta_j], axis=-1)  # [Ne*Ne, 2]
+    phi_pair = jnp.stack([upper_phi_i, upper_phi_j], axis=-1)  # [Ne*Ne, 2]
+    pair_feature = jnp.stack([theta_pair, phi_pair], axis= -1)
+    
+    return pair_feature, upper_i, upper_j
 
 
 def original_pfaf(electron):
@@ -163,40 +102,41 @@ class Pfaffian(nn.Module):
     def __call__(self, electrons: jnp.ndarray):
         # Using NN for wfn
         Ne = electrons.shape[0]
-        pair_feature, rho_feature, ang_feature, zij,  vivj, uivj_ujvi, rhoij, angij = extract_pairs(electron=electrons)
-        rho_model = PairwiseNetwork()
-        rho_params = rho_model.init(jax.random.PRNGKey(
-            42), rho_feature)  # Initialize model
-        rho_model_output = rho_model.apply(rho_params, rho_feature)  # Forward pass
-        g_ij = jnp.reshape(rho_model_output, [Ne, Ne])
-
-        ang_model = PairwiseNetwork()
-        ang_params = ang_model.init(jax.random.PRNGKey(
-            42), ang_feature)  # Initialize model
-        ang_model_output = rho_model.apply(ang_params, ang_feature)  # Forward pass
-        phi_ang = jnp.reshape(ang_model_output, [Ne, Ne])
+        electron_pair, upper_i, upper_j = extract_pairs(electron=electrons)
+        theta, phi = electron_pair[..., 0], electron_pair[..., 1]
+        pair_num = Ne * (Ne-1) // 2 
+        # print("electron_pair", electron_pair.shape, theta.shape, phi.shape)
         
-        vivj = jnp.reshape(vivj, [Ne, Ne])
+        # electron_pair: [pair_num, 2, 2]
+        # theta: [pair_num, 2]
+        # phi: [pair_num, 2]
+        # h_one: [pair_num, 2, feature]
+        h_one = PfafformerLayers(
+            num_heads=self.num_heads,
+            num_layers=self.num_layers,
+            heads_dim=self.heads_dim,
+        )(electron_pair) 
 
-        rhoij = jnp.reshape(rhoij, [Ne, Ne])
-        angij = jnp.reshape(angij, [Ne, Ne])
-
-        # model = PairwiseNetwork()
-        # params = model.init(jax.random.PRNGKey(
-        #     42), pair_feature)  # Initialize model
-        # model_output = model.apply(params, pair_feature)  # Forward pass
-        # n_ij = jnp.reshape(model_output, [Ne, Ne])
-        # zij = jnp.reshape(zij, [Ne, Ne])
-        # vivj = jnp.reshape(vivj, [Ne, Ne])
-        # uivj_ujvi = jnp.reshape(uivj_ujvi, [Ne, Ne])
-        # g_ij = (n_ij - n_ij.T) / 2  # Make it antisymmetric
-        # pfaffian = jnp.sqrt(jnp.linalg.det(( 1 - jnp.eye(Ne))  /(1e-10 + zij * vivj)))
-        pfaffian = jnp.sqrt(jnp.linalg.det( ( 1 - jnp.eye(Ne) /(1e-10 + rhoij * vivj * 1))))
+        pair_orbs = jnp.zeros(pair_num)
+        for i in jnp.arange(0, pair_num):
+            pair_orb = Orbitals(
+                type=self.orbital_type, Q=self.Q, nspins= (2, 0), ndets=self.ndets
+            )(h_one[i], theta[i], phi[i])
+            # signs, logdets = jnp.linalg.slogdet(pair_orb)
+            # logmax = jnp.max(logdets)  # logsumexp trick
+            # pair_orbs = pair_orbs.at[i].set(jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax)
+            dets = jnp.linalg.det(pair_orb)
+            pair_orbs = pair_orbs.at[i].set(jnp.sum(dets))
+        pfaf_ij = jnp.zeros([Ne, Ne])
+        pfaf_ij = pfaf_ij.at[upper_i, upper_j].set(pair_orbs)
+        pfaf_ij = pfaf_ij - pfaf_ij.T
+        # print(pfaf_ij)
+        pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
         # Using original Moore-Read Pfaffian for benchmarking
         # pfaf_ij = original_pfaf(electron=electrons)
         # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
-        # print(pfaffian * self.flux_attachment(electrons))
-        return jnp.log(self.flux_attachment(electrons) * pfaffian)
+        cf_flux = self.flux_attachment(electrons)
+        return jnp.log(pfaffian * cf_flux)
 
     @nn.compact
     def flux_attachment(self, electrons):
