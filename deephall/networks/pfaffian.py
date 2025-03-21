@@ -19,7 +19,7 @@ class PfafformerLayers(nn.Module):
 
     @nn.compact
     def __call__(self, electrons: jnp.ndarray):
-        theta, phi = electrons[..., 0], electrons[..., 1]
+        theta, phi = electrons[..., 0], electrons[..., 1]  # [num, 2], [num, 2]
         h_one = self.input_feature(theta, phi)
         attention_dim = self.num_heads * self.heads_dim
         h_one = nn.Dense(attention_dim, use_bias=False)(h_one)
@@ -71,9 +71,11 @@ def extract_pairs(electron):
     upper_phi_i = phii[upper_i, upper_j]
     upper_phi_j = phij[upper_i, upper_j]
 
-    theta_pair = jnp.stack([upper_theta_i, upper_theta_j], axis=-1)  # [Ne*Ne, 2]
-    phi_pair = jnp.stack([upper_phi_i, upper_phi_j], axis=-1)  # [Ne*Ne, 2]
-    pair_feature = jnp.stack([theta_pair, phi_pair], axis= -1)
+    theta_pair = jnp.stack([upper_theta_i, upper_theta_j], axis=-1)  # [Ne*(Ne-1)/2, 2]
+    phi_pair = jnp.stack([upper_phi_i, upper_phi_j], axis=-1)  # [Ne*(Ne-1)/2, 2]
+    pair_feature = jnp.stack([theta_pair, phi_pair], axis=-1)  # [Ne*(Ne-1)/2, 2, 2]
+
+    # [B, (i, j), (theta, phi)]
     
     return pair_feature, upper_i, upper_j
 
@@ -97,6 +99,7 @@ class Pfaffian(nn.Module):
     heads_dim: int
     num_layers: int
     orbital_type: OrbitalType
+    benchmark_original: bool = False
 
     @nn.compact
     def __call__(self, electrons: jnp.ndarray):
@@ -117,26 +120,31 @@ class Pfaffian(nn.Module):
             heads_dim=self.heads_dim,
         )(electron_pair) 
 
-        pair_orbs = jnp.zeros(pair_num)
+        pair_orbs = jnp.zeros(pair_num, dtype=jnp.complex64)
         for i in jnp.arange(0, pair_num):
-            pair_orb = Orbitals(
-                type=self.orbital_type, Q=self.Q, nspins= (2, 0), ndets=self.ndets
-            )(h_one[i], theta[i], phi[i])
+            pair_orb = self.orbitals(h_one[i], theta[i], phi[i])
             # signs, logdets = jnp.linalg.slogdet(pair_orb)
             # logmax = jnp.max(logdets)  # logsumexp trick
             # pair_orbs = pair_orbs.at[i].set(jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax)
             dets = jnp.linalg.det(pair_orb)
             pair_orbs = pair_orbs.at[i].set(jnp.sum(dets))
-        pfaf_ij = jnp.zeros([Ne, Ne])
+        pfaf_ij = jnp.zeros([Ne, Ne], dtype=jnp.complex64)
         pfaf_ij = pfaf_ij.at[upper_i, upper_j].set(pair_orbs)
         pfaf_ij = pfaf_ij - pfaf_ij.T
-        # print(pfaf_ij)
         pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
-        # Using original Moore-Read Pfaffian for benchmarking
-        # pfaf_ij = original_pfaf(electron=electrons)
-        # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
+        if self.benchmark_original:
+            # Using original Moore-Read Pfaffian for benchmarking
+            orig_pfaf_ij = original_pfaf(electron=electrons)
+            # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
         cf_flux = self.flux_attachment(electrons)
         return jnp.log(pfaffian * cf_flux)
+
+    @nn.compact
+    def orbitals(self, h, theta, phi):
+        orbitals = Orbitals(
+                type=self.orbital_type, Q=self.Q, nspins=(2, 0), ndets=self.ndets
+            )(h, theta, phi)
+        return orbitals
 
     @nn.compact
     def flux_attachment(self, electrons):
