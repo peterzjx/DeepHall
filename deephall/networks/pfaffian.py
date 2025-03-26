@@ -131,10 +131,12 @@ class Pfaffian(nn.Module):
         pfaf_ij = jnp.zeros([Ne, Ne], dtype=jnp.complex64)
         pfaf_ij = pfaf_ij.at[upper_i, upper_j].set(pair_orbs)
         pfaf_ij = pfaf_ij - pfaf_ij.T
+        # orig_pfaf_ij = original_pfaf(electron=electrons)
         pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
+        # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij * orig_pfaf_ij))
         if self.benchmark_original:
             # Using original Moore-Read Pfaffian for benchmarking
-            orig_pfaf_ij = original_pfaf(electron=electrons)
+            pfaf_ij = original_pfaf(electron=electrons)
             # pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
         cf_flux = self.flux_attachment(electrons)
         return jnp.log(pfaffian * cf_flux)
