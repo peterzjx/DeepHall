@@ -24,12 +24,12 @@ class PfafformerLayers(nn.Module):
         h_one = self.input_feature(theta, phi)
         attention_dim = self.num_heads * self.heads_dim
         h_one = nn.Dense(attention_dim, use_bias=False)(h_one)
-        for _ in range(self.num_layers):
-            attn_out = nn.MultiHeadAttention(num_heads=self.num_heads)(h_one)
-            h_one += nn.Dense(attention_dim, use_bias=False)(attn_out)
-            h_one = nn.LayerNorm(epsilon=1e-5)(h_one)
-            h_one += nn.tanh(nn.Dense(attention_dim)(h_one))
-            h_one = nn.LayerNorm(epsilon=1e-5)(h_one)
+        for i in range(self.num_layers):
+            attn_out = nn.MultiHeadAttention(num_heads=self.num_heads, name=f'mha_{i}')(h_one)
+            h_one += nn.Dense(attention_dim, use_bias=False, name=f'dense1_{i}')(attn_out)
+            h_one = nn.LayerNorm(epsilon=1e-5, name=f'ln1_{i}')(h_one)
+            h_one += nn.tanh(nn.Dense(attention_dim, name=f'dense2_{i}')(h_one))
+            h_one = nn.LayerNorm(epsilon=1e-5, name=f'ln2_{i}')(h_one)
         return h_one
 
     def input_feature(self, theta: jnp.ndarray, phi: jnp.ndarray):
@@ -155,90 +155,46 @@ class Pfaffian(nn.Module):
             heads_dim=self.heads_dim
         )
 
-        self.pair_orbitals = PairOrbitals(
+        self.pair_orbitals = Orbitals(
             type=self.orbital_type, 
             Q=self.Q, 
+            nspins=(2, 0),
             ndets=1
         )
 
     def __call__(self, electrons: jnp.ndarray):
-        # Using NN for wfn
         Ne = electrons.shape[0]
         electron_pair, upper_i, upper_j = extract_pairs(electron=electrons)
         theta, phi = electron_pair[..., 0], electron_pair[..., 1]
         pair_num = Ne * (Ne-1) // 2 
-
         
+        # Initialize parameters outside the loop
+        h_one_value = jax.vmap(self.h_one_function)(electron_pair)
+        pair_values = jax.vmap(self.pair_orbitals)(h_one_value, theta, phi)
         
-
-        if self.benchmark_original:
-            # Using original Moore-Read Pfaffian for benchmarking
-            pfaf_ij = original_pfaf(electron=electrons)
-            pfaffian = jnp.sqrt(jnp.linalg.det(pfaf_ij))
-            
-        else:
-            #########################################################################
-            pair_orbs = jnp.zeros(pair_num, dtype=jnp.complex64)
+        # Apply truncation to all pairs at once
+        trunc_factors = jax.vmap(pairwise_trunc, in_axes=(None, 0, 0, None))(
+            jnp.sqrt(self.Q), theta, phi, self.mask_len
+        )
+        pair_values = pair_values * trunc_factors[..., None, None]
         
-            #     h_one = PfafformerLayers(
-            #         num_heads=self.num_heads,
-            #         num_layers=self.num_layers,
-            #         heads_dim=self.heads_dim,
-            #     )(electrons)
-            #     orbitals = Orbitals(
-            #         type=self.orbital_type, Q=self.Q, nspins=(2, 0), ndets=self.ndets
-            #     )(h_one, theta, phi)
-
-            # h_one_function = PfafformerLayers(
-            #     num_heads=self.num_heads,
-            #     num_layers=self.num_layers,
-            #     heads_dim=self.heads_dim)
-            # h_one_param = h_one_function.init(jax.random.PRNGKey(0), jnp.zeros_like(electron_pair[0]))
-            # h_one_value = h_one_function.apply({'params': h_one_param['params']},electron_pair[0])
-            # pair_orbitals = Orbitals(
-            #     type=self.orbital_type, 
-            #     Q=self.Q, nspins=(2, 0), 
-            #     ndets=1)
-            # pair_orb_param = pair_orbitals.init(jax.random.PRNGKey(1), jnp.zeros_like(h_one_value),jnp.zeros_like(theta[0]),jnp.zeros_like(phi[0]))  # Dummy input to init parameters
-            h_one_param = self.h_one_function.init(jax.random.PRNGKey(0), jnp.zeros_like(electron_pair[0]))
-            h_one_value = self.h_one_function.apply({'params': h_one_param['params']},electron_pair[0])
-            pair_orb_param = self.pair_orbitals.init(jax.random.PRNGKey(1), jnp.zeros_like(h_one_value),jnp.zeros_like(theta[0]),jnp.zeros_like(phi[0]))  # Dummy input to init parameters
-#################################################################################
-            h_one_value = self.h_one_function(electron_pair)
-            print('h1 shape',h_one_value.shape)
-            # h_one_value = self.h_one_function.apply({'params': h_one_param['params']},electron_pair[i])
-            pair_value = self.pair_orbitals(h_one_value, theta, phi)
-            # pair_value = self.pair_orbitals.apply({'params': pair_orb_param['params']},h_one_value, theta[i], phi[i])
-            # pair_value = pair_value * pairwise_trunc(jnp.sqrt(self.Q), theta=theta, phi=phi,mask_len=self.mask_len)
-            print('ele pair', electron_pair.shape)
-            print('pair_value',pair_value.shape)
-
-            dets = jnp.linalg.det(pair_value)
-            print(dets.shape)
-            pair_orbs = pair_orbs.at[i].set(jnp.sum(dets))
-#################################################################################
-            # for i in jnp.arange(0, pair_num):
-            #     # h_one_value = self.h_one_function(electron_pair[i])
-            #     h_one_value = self.h_one_function.apply({'params': h_one_param['params']},electron_pair[i])
-            #     # pair_value = self.pair_orbitals(h_one_value, theta[i], phi[i])
-            #     pair_value = self.pair_orbitals.apply({'params': pair_orb_param['params']},h_one_value, theta[i], phi[i])
-            #     pair_value = pair_value * pairwise_trunc(jnp.sqrt(self.Q), theta=theta[i], phi=phi[i],mask_len=self.mask_len)
-            #     dets = jnp.linalg.det(pair_value)
-            #     pair_orbs = pair_orbs.at[i].set(jnp.sum(dets))
-            #     print(h_one_value.shape)
-            #     print(pair_value.shape)
-            pfaf_ij = jnp.zeros([Ne, Ne], dtype=jnp.complex64)
-            pfaf_ij = pfaf_ij.at[upper_i, upper_j].set(pair_orbs)
-            pfaf_ij = pfaf_ij - pfaf_ij.T
-            #########################################################################
-            # orig_pfaf_ij = original_pfaf(electron=electrons)
-            cusp_matrix = self.cusp_matrix(electrons, mask_len=self.mask_len)
-            pfaf0 = original_pfaf(electrons, mask_len=self.mask_len, truncate=True)
-            # print(pfaf_ij+cusp_matrix)
-            # print(cusp_matrix)
-            # print(pfaf0)
-            pfaffian = jnp.sqrt(jnp.linalg.det((pfaf_ij+cusp_matrix)))
-            # pfaffian = jnp.sqrt(jnp.linalg.det(cusp_matrix))
+        # Calculate determinants for all pairs
+        dets = jax.vmap(jnp.linalg.det)(pair_values)
+        pair_orbs = jnp.sum(dets, axis=-1)
+        
+        # Construct the antisymmetric matrix
+        pfaf_ij = jnp.zeros([Ne, Ne], dtype=jnp.complex64)
+        pfaf_ij = pfaf_ij.at[upper_i, upper_j].set(pair_orbs)
+        pfaf_ij = pfaf_ij - pfaf_ij.T
+        #########################################################################
+        # orig_pfaf_ij = original_pfaf(electron=electrons)
+        cusp_matrix = self.cusp_matrix(electrons, mask_len=self.mask_len)
+        pfaf0 = original_pfaf(electrons, mask_len=self.mask_len, truncate=True)
+        # print(pfaf_ij+cusp_matrix)
+        # print(cusp_matrix)
+        # print(pfaf0)
+        pfaffian = jnp.sqrt(jnp.linalg.det((pfaf_ij+cusp_matrix)))
+        # pfaffian = jnp.sqrt(jnp.linalg.det(cusp_matrix))
         
         
         cf_flux = self.flux_attachment(electrons, mask_len=self.mask_len, truncate=True)
