@@ -74,7 +74,6 @@ class Psiformer(nn.Module):
         orbitals = self.orbitals(electrons)
         
         signs, logdets = jnp.linalg.slogdet(orbitals)
-        print(orbitals.shape, logdets.shape)
         logmax = jnp.max(logdets)  # logsumexp trick
         return jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax
 
