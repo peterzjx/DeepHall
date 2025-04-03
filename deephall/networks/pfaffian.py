@@ -144,7 +144,7 @@ class Pfaffian(nn.Module):
     heads_dim: int
     num_layers: int
     orbital_type: OrbitalType
-    mask_len: float = 0.2
+    mask_len: float = 0.1
     benchmark_original: bool = False
 
     def setup(self):
@@ -157,7 +157,7 @@ class Pfaffian(nn.Module):
 
         self.pair_orbitals = Orbitals(
             type=self.orbital_type, 
-            Q=self.Q, 
+            Q=3/2, 
             nspins=(2, 0),
             ndets=1
         )
@@ -189,29 +189,13 @@ class Pfaffian(nn.Module):
         #########################################################################
         # orig_pfaf_ij = original_pfaf(electron=electrons)
         cusp_matrix = self.cusp_matrix(electrons, mask_len=self.mask_len)
-        pfaf0 = original_pfaf(electrons, mask_len=self.mask_len, truncate=True)
-        # print(pfaf_ij+cusp_matrix)
-        # print(cusp_matrix)
-        # print(pfaf0)
         pfaffian = jnp.sqrt(jnp.linalg.det((pfaf_ij+cusp_matrix)))
         # pfaffian = jnp.sqrt(jnp.linalg.det(cusp_matrix))
         
         
         cf_flux = self.flux_attachment(electrons, mask_len=self.mask_len, truncate=True)
         return jnp.log(pfaffian * cf_flux)
-        # return jnp.log(pfaffian)
-    @nn.compact
-    # def pair_orbitals(self, electrons):
-    #     theta, phi = electrons[..., 0], electrons[..., 1]
-    #     h_one = PfafformerLayers(
-    #         num_heads=self.num_heads,
-    #         num_layers=self.num_layers,
-    #         heads_dim=self.heads_dim,
-    #     )(electrons)
-    #     orbitals = Orbitals(
-    #         type=self.orbital_type, Q=self.Q, nspins=(2, 0), ndets=self.ndets
-    #     )(h_one, theta, phi)
-        
+
     @nn.compact
     def get_rhoij(self, electrons):
         theta, phi = electrons[..., 0], electrons[..., 1]
