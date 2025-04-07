@@ -170,6 +170,7 @@ class Pfaffian(nn.Module):
         
         # Initialize parameters outside the loop
         h_one_value = jax.vmap(self.h_one_function)(electron_pair)
+        
         pair_values = jax.vmap(self.pair_orbitals)(h_one_value, theta, phi)
         
         # Apply truncation to all pairs at once
