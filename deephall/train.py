@@ -87,9 +87,18 @@ def train(cfg: Config):
 
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
-    initial_step, (params, data, opt_state, mcmc_width) = (
-        log_manager.try_restore_checkpoint() or initalize_state(cfg, model)
-    )
+
+    if cfg.log.pretrained_path is not None:
+        initial_step, (params, data, opt_state, mcmc_width) = (
+            initalize_state(cfg, model)
+        )
+        _, (params, _, opt_state, _) = (
+            log_manager.try_load_pretrained_checkpoint()
+        )
+    else:
+        initial_step, (params, data, opt_state, mcmc_width) = (
+            log_manager.try_restore_checkpoint() or initalize_state(cfg, model)
+        )
 
     if (
         cfg.optim.optimizer == OptimizerName.none
