@@ -35,6 +35,7 @@ def make_network(system: System, network: Network) -> nn.Module:
             num_layers=network.psiformer.num_layers,
             heads_dim=network.psiformer.heads_dim,
             orbital_type=network.orbital,
+            flux_type=network.pfaffian.flux_type,
         )
     
     if network.type == NetworkType.psiformer:

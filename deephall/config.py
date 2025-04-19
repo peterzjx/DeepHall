@@ -52,6 +52,9 @@ class InteractionType(StrEnum):
     coulomb = "coulomb"
     harmonic = "harmonic"
 
+class FluxType(StrEnum):
+    product = "product"
+    symmetric_network = "symmetric_network"
 
 @dataclass
 class System:
@@ -78,7 +81,7 @@ class System:
 
     interaction_type: InteractionType = InteractionType.coulomb
 
-
+    flux_type: FluxType = FluxType.symmetric_network
 class NetworkType(StrEnum):
     psiformer = "psiformer"
     laughlin = "laughlin"
@@ -90,11 +93,13 @@ class OrbitalType(StrEnum):
     sparse = "sparse"
 
 
+
 @dataclass
 class PfaffianNetwork:
     num_heads: int = 4
     heads_dim: int = 64
     num_layers: int = 2
+    flux_type: FluxType = FluxType.symmetric_network
 
 
 @dataclass
@@ -185,6 +190,13 @@ class Log:
     Can be a directory containing checkpoints or path to a specific checkpoint.
     """
 
+    pretrained_path: str | None = None
+    """
+    Path to pretrained checkpoints.
+
+    Can be a directory containing checkpoints or path to a specific checkpoint.
+    """
+    
     save_time_interval: int = 10 * 60
     """Minimum time (in seconds) between checkpoint saves.
 

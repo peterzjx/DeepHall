@@ -150,6 +150,13 @@ class LogManager:
             if not self.restore_path.exists():
                 logger.warning("Restore path %s does not exist!", self.restore_path)
 
+        if cfg.log.pretrained_path is None:
+            self.pretrained_path = None
+        else:
+            self.pretrained_path = UPath(cfg.log.pretrained_path)
+            if not self.pretrained_path.exists():
+                logger.warning("Pretrained path %s does not exist!", self.pretrained_path)
+
         if not self.save_path.exists():
             self.save_path.mkdir(parents=True)
 
@@ -189,6 +196,20 @@ class LogManager:
                 return self.restore_checkpoint(ckpt_path)
             except Exception as e:
                 logger.warning("Error restoring checkpoint %s: %s", ckpt_path, e)
+        return None
+    
+    def try_load_pretrained_checkpoint(self) -> tuple[int, CheckpointState] | None:
+        """Try to load pretrained checkpoints from `pretrained_path`."""
+        if not self.pretrained_path.exists():
+            return None
+        if self.pretrained_path.is_file():
+            return self.restore_checkpoint(self.pretrained_path)
+        for ckpt_path in sorted(self.pretrained_path.glob("ckpt_*.npz"), reverse=True):
+            ckpt_path = cast(UPath, ckpt_path)
+            try:
+                return self.restore_checkpoint(ckpt_path)
+            except Exception as e:
+                logger.warning("Error loading pretrained checkpoint %s: %s", ckpt_path, e)
         return None
 
     @staticmethod
