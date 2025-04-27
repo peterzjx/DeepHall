@@ -6,10 +6,10 @@ from jax import numpy as jnp
 from flax.training import train_state
 import optax
 
-from deephall.config import OrbitalType
+from deephall.config import OrbitalType, FluxType
 
 from .blocks import Jastrow, Orbitals
-
+from .bosonic_network import SymmetricNetwork
 
 
 
@@ -144,6 +144,7 @@ class Pfaffian(nn.Module):
     heads_dim: int
     num_layers: int
     orbital_type: OrbitalType
+    flux_type: FluxType
     mask_len: float = 0.1
     benchmark_original: bool = False
 
@@ -161,6 +162,7 @@ class Pfaffian(nn.Module):
             nspins=(2, 0),
             ndets=1
         )
+        self.symmetric_network = SymmetricNetwork()
 
     def __call__(self, electrons: jnp.ndarray):
         Ne = electrons.shape[0]
@@ -190,8 +192,9 @@ class Pfaffian(nn.Module):
         #########################################################################
         # orig_pfaf_ij = original_pfaf(electron=electrons)
         cusp_matrix = self.cusp_matrix(electrons, mask_len=self.mask_len)
+
+        # In cusp condition, pfaf_ij is a zero matrix and cusp_matrix is defined manually
         pfaffian = jnp.sqrt(jnp.linalg.det((pfaf_ij+cusp_matrix)))
-        # pfaffian = jnp.sqrt(jnp.linalg.det(cusp_matrix))
         
         
         cf_flux = self.flux_attachment(electrons, mask_len=self.mask_len, truncate=True)
@@ -223,8 +226,17 @@ class Pfaffian(nn.Module):
         cusp_element =  element * jnp.exp(-(rho / mask_len)**2)
         return cusp_element
 
-    @nn.compact
     def flux_attachment(self, electrons, mask_len=0.1, truncate=False):
+        if self.flux_type == FluxType.product:
+            return self.flux_product(electrons, mask_len, truncate)
+        elif self.flux_type == FluxType.symmetric_network:
+            return self.flux_symmetric_network(electrons)
+        else:
+            raise ValueError(f"Invalid flux type: {self.flux_type}")
+
+
+    @nn.compact
+    def flux_product(self, electrons, mask_len=0.1, truncate=False):
         """
             electrons: [..., N, 2]
         """
@@ -240,9 +252,22 @@ class Pfaffian(nn.Module):
         
         if truncate == True:
             rho = jnp.abs(element)
-            masked_element =  jnp.sqrt(mask_len**2 + rho**2) * element / (rho + jnp.eye(u.shape[0])) + jnp.eye(u.shape[0])
+            masked_element = jnp.sqrt(mask_len**2 + rho**2) * element / \
+                (rho + jnp.eye(u.shape[0])) + jnp.eye(u.shape[0])
+            # masked_element -> element where rho is large
+            # masked_element -> constant where rho is small
+
             windings = jnp.prod(masked_element, keepdims=False)  # [..., N, 1]
         else:
             windings = jnp.prod(element + jnp.eye(u.shape[0]), keepdims=False)  # [..., N, 1]
-        
+
         return windings
+
+    @nn.compact
+    def flux_symmetric_network(self, electrons):
+        '''
+            electrons: [..., N, 2]
+        '''
+        flux = self.symmetric_network(electrons)
+        flux = flux[..., 0] + 1j * flux[..., 1]
+        return flux

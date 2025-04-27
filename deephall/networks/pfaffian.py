@@ -169,7 +169,7 @@ class Pfaffian(nn.Module):
         electron_pair, upper_i, upper_j = extract_pairs(electron=electrons)
         theta, phi = electron_pair[..., 0], electron_pair[..., 1]
         pair_num = Ne * (Ne-1) // 2 
-        
+        print(electron_pair.shape)
         # Initialize parameters outside the loop
         h_one_value = jax.vmap(self.h_one_function)(electron_pair)
         
