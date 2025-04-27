@@ -1,5 +1,5 @@
 from deephall import Config, train
-from deephall.config import Network, NetworkType, System,PsiformerNetwork
+from deephall.config import Network, NetworkType, FluxType
 import jax
 from datetime import datetime
 # jax.config.update("jax_debug_nans", True)
@@ -8,12 +8,12 @@ from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 for Ne in [4]:
     for kappa in [0.5]:
-        config = Config(network=Network(type=NetworkType.pfaffian))
+        config = Config(network=Network(type=NetworkType.pfaffian, flux_type=FluxType.symmetric_mlp_network))
         config.system.interaction_strength = kappa
         config.system.nspins = (Ne, 0)
         config.system.flux = 2*Ne+1
         config.optim.iterations  = 13000
-        config.batch_size = 2048
+        config.batch_size = 256
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"

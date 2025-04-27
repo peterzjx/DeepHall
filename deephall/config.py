@@ -54,7 +54,8 @@ class InteractionType(StrEnum):
 
 class FluxType(StrEnum):
     product = "product"
-    symmetric_network = "symmetric_network"
+    symmetric_mlp_network = "symmetric_mlp_network"
+    symmetric_att_network = "symmetric_att_network"
 
 @dataclass
 class System:
@@ -81,7 +82,8 @@ class System:
 
     interaction_type: InteractionType = InteractionType.coulomb
 
-    flux_type: FluxType = FluxType.symmetric_network
+    flux_type: FluxType = FluxType.symmetric_mlp_network
+
 class NetworkType(StrEnum):
     psiformer = "psiformer"
     laughlin = "laughlin"
@@ -99,7 +101,7 @@ class PfaffianNetwork:
     num_heads: int = 4
     heads_dim: int = 64
     num_layers: int = 2
-    flux_type: FluxType = FluxType.symmetric_network
+    flux_type: FluxType = FluxType.symmetric_mlp_network
 
 
 @dataclass
