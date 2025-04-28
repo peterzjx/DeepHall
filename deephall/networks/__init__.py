@@ -17,7 +17,7 @@ from flax import linen as nn
 from deephall.config import Network, NetworkType, System
 from deephall.networks.laughlin import Laughlin
 from deephall.networks.psiformer import Psiformer
-from deephall.networks.pfaffian import Pfaffian
+from deephall.networks.parton import Parton
 
 
 def make_network(system: System, network: Network) -> nn.Module:
@@ -26,16 +26,17 @@ def make_network(system: System, network: Network) -> nn.Module:
         return Laughlin(
             flux=system.flux, nspins=system.nspins, excitation_lz=system.lz_center
         )
-    if network.type == NetworkType.pfaffian:
-        return Pfaffian(
+    if network.type == NetworkType.parton:
+        return Parton(
             Q=Q,
             nspins=system.nspins,
-            ndets=network.psiformer.determinants,
-            num_heads=network.psiformer.num_heads,
-            num_layers=network.psiformer.num_layers,
-            heads_dim=network.psiformer.heads_dim,
+            ndets=network.parton.determinants,
+            num_heads=network.parton.num_heads,
+            num_layers=network.parton.num_layers,
+            heads_dim=network.parton.heads_dim,
+            fermionic_type=network.parton.fermionic_type,
+            flux_type=network.parton.flux_type,
             orbital_type=network.orbital,
-            flux_type=network.pfaffian.flux_type,
         )
     
     if network.type == NetworkType.psiformer:

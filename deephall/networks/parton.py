@@ -1,15 +1,12 @@
 
 from flax import linen as nn
-import numpy as np
 import jax
 from jax import numpy as jnp
-from flax.training import train_state
-import optax
 
-from deephall.config import OrbitalType, FluxType
+from deephall.config import OrbitalType, FluxType, FermionicType
 
-from .blocks import Jastrow, Orbitals
-from .bosonic_network import SymmetricNetwork
+from .blocks import Orbitals
+from .bosonic_network import SymmetricAttNetwork, SymmetricMLPNetwork
 
 
 
@@ -113,30 +110,7 @@ def original_pfaf(electron, mask_len = 0.1, truncate = False):
         mask_pf_ij = pf_ij * (1-jnp.exp(-(rho_ij/mask_len)**2))
         return mask_pf_ij
 
-class PairOrbitals(nn.Module):
-    Q: float
-    ndets: int
-
-    def setup(self):
-        m = np.arange(-self.Q, self.Q + 1)
-        self.norm_factor = jnp.array(np.sqrt(ss.comb(2 * self.Q, self.Q - m)))
-        
-        self.featured_orbitals = FeaturedOrbitals(
-            nspins=self.nspins,
-            features=(int(self.Q * 2) + 1, sum(self.nspins), self.ndets),
-        )
-
-    def __call__(self, h_one, theta, phi):
-        orbitals = self.featured_orbitals(h_one)
-
-        m = jnp.arange(-self.Q, self.Q + 1)
-        u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]
-        v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]
-        envelope = self.norm_factor * u ** (self.Q + m) * v ** (self.Q - m)
-        orbitals = jnp.sum(orbitals * envelope[..., None, None], axis=1)
-
-        return jnp.moveaxis(orbitals, -1, 0)  # Move ndets dim to the front
-class Pfaffian(nn.Module):
+class Parton(nn.Module):
     nspins: tuple[int, int]
     Q: float
     ndets: int
@@ -144,33 +118,41 @@ class Pfaffian(nn.Module):
     heads_dim: int
     num_layers: int
     orbital_type: OrbitalType
+    fermionic_type: FermionicType
     flux_type: FluxType
     mask_len: float = 0.1
     benchmark_original: bool = False
 
     def setup(self):
         """Define submodules within the same Flax scope."""
-        self.h_one_function = PfafformerLayers(
-            num_heads=self.num_heads,
-            num_layers=self.num_layers,
-            heads_dim=self.heads_dim
-        )
+        if self.fermionic_type == FermionicType.pfaffian:
+            self.h_one_function = PfafformerLayers(
+                num_heads=self.num_heads,
+                num_layers=self.num_layers,
+                heads_dim=self.heads_dim
+            )
+            # TODO: make this consistent with self.Q and self.nspins
+            self.pair_orbitals = Orbitals(
+                type=self.orbital_type, 
+                Q=3/2, 
+                nspins=(2, 0),
+                ndets=1
+            )
 
-        self.pair_orbitals = Orbitals(
-            type=self.orbital_type, 
-            Q=3/2, 
-            nspins=(2, 0),
-            ndets=1
-        )
-        self.symmetric_network = SymmetricNetwork()
+        elif self.fermionic_type == FermionicType.product:
+            pass
 
-    def __call__(self, electrons: jnp.ndarray):
+        if self.flux_type == FluxType.symmetric_mlp_network:
+            self.symmetric_network = SymmetricMLPNetwork()
+        elif self.flux_type == FluxType.symmetric_att_network:
+            self.symmetric_network = SymmetricAttNetwork()
+
+    def _get_fermionic_part_pfaffian(self, electrons):
         Ne = electrons.shape[0]
         electron_pair, upper_i, upper_j = extract_pairs(electron=electrons)
         theta, phi = electron_pair[..., 0], electron_pair[..., 1]
-        pair_num = Ne * (Ne-1) // 2 
-        
-        # Initialize parameters outside the loop
+
+        # Pairwise pfaffian
         h_one_value = jax.vmap(self.h_one_function)(electron_pair)
         
         pair_values = jax.vmap(self.pair_orbitals)(h_one_value, theta, phi)
@@ -195,10 +177,19 @@ class Pfaffian(nn.Module):
 
         # In cusp condition, pfaf_ij is a zero matrix and cusp_matrix is defined manually
         pfaffian = jnp.sqrt(jnp.linalg.det((pfaf_ij+cusp_matrix)))
+        return pfaffian
+    
+    def _get_fermionic_part_product(self, electrons):
+        pass
+
+    def __call__(self, electrons: jnp.ndarray):
+        if self.fermionic_type == FermionicType.pfaffian:
+            fermionic_part = self._get_fermionic_part_pfaffian(electrons)
+        elif self.fermionic_type == FermionicType.product:
+            fermionic_part = self._get_fermionic_part_product(electrons)
         
-        
-        cf_flux = self.flux_attachment(electrons, mask_len=self.mask_len, truncate=True)
-        return jnp.log(pfaffian * cf_flux)
+        bosonic_part = self.flux_attachment(electrons, mask_len=self.mask_len, truncate=True)
+        return jnp.log(fermionic_part * bosonic_part)
 
     @nn.compact
     def get_rhoij(self, electrons):
@@ -229,7 +220,7 @@ class Pfaffian(nn.Module):
     def flux_attachment(self, electrons, mask_len=0.1, truncate=False):
         if self.flux_type == FluxType.product:
             return self.flux_product(electrons, mask_len, truncate)
-        elif self.flux_type == FluxType.symmetric_network:
+        elif self.flux_type in [FluxType.symmetric_mlp_network, FluxType.symmetric_att_network]:
             return self.flux_symmetric_network(electrons)
         else:
             raise ValueError(f"Invalid flux type: {self.flux_type}")

@@ -10,7 +10,7 @@ from deephall.config import OrbitalType, FluxType
 
 from deephall.networks.blocks import Jastrow, Orbitals
 from deephall.networks.bosonic_network import SymmetricNetwork
-from deephall.networks.pfaffian import Pfaffian
+from deephall.networks.parton import Parton
 
 class VelocityModel(nn.Module):
     nspins: tuple[int, int]

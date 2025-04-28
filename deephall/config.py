@@ -87,8 +87,12 @@ class System:
 class NetworkType(StrEnum):
     psiformer = "psiformer"
     laughlin = "laughlin"
-    pfaffian = "pfaffian"
+    parton = "parton"
 
+
+class FermionicType(StrEnum):
+    pfaffian = "pfaffian"
+    product = "product"  # arXiv:2205.13205
 
 class OrbitalType(StrEnum):
     full = "full"
@@ -97,10 +101,12 @@ class OrbitalType(StrEnum):
 
 
 @dataclass
-class PfaffianNetwork:
+class PartonNetwork:
     num_heads: int = 4
     heads_dim: int = 64
     num_layers: int = 2
+    determinants: int = 1
+    fermionic_type: FermionicType = FermionicType.pfaffian
     flux_type: FluxType = FluxType.symmetric_mlp_network
 
 
@@ -115,10 +121,9 @@ class PsiformerNetwork:
 @dataclass
 class Network:
     type: NetworkType = NetworkType.psiformer
-    # type: NetworkType = NetworkType.pfaffian
     orbital: OrbitalType = OrbitalType.full
     psiformer: PsiformerNetwork = field(default_factory=PsiformerNetwork)
-    pfaffian: PfaffianNetwork = field(default_factory=PfaffianNetwork)
+    parton: PartonNetwork = field(default_factory=PartonNetwork)
 
 
 @dataclass

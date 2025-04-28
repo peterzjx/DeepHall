@@ -1,5 +1,5 @@
 from deephall import Config, train
-from deephall.config import Network, NetworkType, FluxType
+from deephall.config import Network, NetworkType, FluxType, FermionicType, PartonNetwork
 import jax
 from datetime import datetime
 # jax.config.update("jax_debug_nans", True)
@@ -8,7 +8,13 @@ from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 for Ne in [4]:
     for kappa in [0.5]:
-        config = Config(network=Network(type=NetworkType.pfaffian, flux_type=FluxType.symmetric_mlp_network))
+        config = Config(network=Network(
+            type=NetworkType.parton,
+            parton=PartonNetwork(
+                fermionic_type=FermionicType.pfaffian,
+                flux_type=FluxType.symmetric_mlp_network
+            )
+        ))
         config.system.interaction_strength = kappa
         config.system.nspins = (Ne, 0)
         config.system.flux = 2*Ne+1
