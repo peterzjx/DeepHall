@@ -131,7 +131,7 @@ class Parton(nn.Module):
                 num_layers=self.num_layers,
                 heads_dim=self.heads_dim
             )
-            # TODO: make this consistent with self.Q and self.nspins
+            # NOTE: this Q is the effective composite fermion magnetic monopole strength Q*
             self.pair_orbitals = Orbitals(
                 type=self.orbital_type, 
                 Q=3/2, 
