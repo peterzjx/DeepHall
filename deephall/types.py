@@ -17,6 +17,7 @@ from typing import NamedTuple, Protocol, TypedDict
 from chex import ArrayTree, PRNGKey
 from jax import numpy as jnp
 from optax import OptState
+from deephall.dmc.dmc import WalkerState
 
 
 class AngularMomenta(TypedDict):
@@ -44,6 +45,12 @@ class CheckpointState(NamedTuple):
     data: jnp.ndarray
     opt_state: OptState
     mcmc_width: jnp.ndarray
+
+
+class DMCCheckpointState(NamedTuple):
+    params: ArrayTree
+    walker_state: WalkerState
+    opt_state: OptState
 
 
 class LocalEnergy(Protocol):

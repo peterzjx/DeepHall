@@ -142,6 +142,9 @@ class MCMC:
     adapt_frequency: int = 200
     "Number of steps after which to update the adaptive MCMC step size."
 
+    use_dmc: bool = False
+    "Whether to use DMC instead of MCMC."
+
 
 @dataclass
 class LearningRate:

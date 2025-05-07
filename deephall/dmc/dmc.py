@@ -2,9 +2,12 @@
 from typing import NamedTuple
 from flax import linen as nn
 import jax
+from jax import lax
 from jax import numpy as jnp
 from chex import ArrayTree, PRNGKey
 import deephall.dmc.velocity_utils as v_utils
+from deephall import constants
+from deephall.types import LogPsiNetwork
 
 
 class WalkerState(NamedTuple):
@@ -129,38 +132,38 @@ def step(key: PRNGKey, params: ArrayTree, model: nn.Module, walker_state: Walker
         weights=next_walker_weights
     )
 
-    return next_walker_state, next_local_energy, num_accepted
+    return next_walker_state, key, next_local_energy, num_accepted
 
 
-def make_mcmc_step(self, model, electrons, weights):
+def make_dmc_step(batch_network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
     @jax.jit
-    def mcmc_step(
-        params: ArrayTree, data: jnp.ndarray, key: PRNGKey, width: jnp.ndarray
+    def dmc_step(
+        params: ArrayTree, init_walker_state: WalkerState, key: PRNGKey,
     ):
-        """Performs a set of MCMC steps.
+        """Performs a set of DMC steps.
 
         Args:
         params: parameters to pass to the network.
-        data: (batched) MCMC configurations to pass to the network.
+        data: (batched) DMC configurations to pass to the network.
         key: RNG state.
-        width: standard deviation to use in the move proposal.
 
         Returns:
-        (data, pmove), where data is the updated MCMC configurations, key the
+        (data, pmove), where data is the updated DMC configurations, key the
         updated RNG state and pmove the average probability a move was accepted.
         """
 
-        def step_fn(i, x):
-            return step(params, batch_network, *x, stddev=width)
+        def step_fn(i, walker_state):
+            return step(key, params, batch_network, walker_state, tau=0.01)
 
-        logprob = 2.0 * batch_network(params, data).real
-        data, key, _, num_accepts = lax.fori_loop(
-            0, steps, step_fn, (data, key, logprob, 0.0)
+        walker_state, key, _, num_accepts = lax.fori_loop(
+            0, steps, step_fn, init_walker_state
         )
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)
-        return data, pmove
+        return walker_state, pmove
+    
+    return dmc_step
 
 
-def initialize_walker_state(electrons: jnp.ndarray, weights: jnp.ndarray):
+def initialize_walker_state(electrons: jnp.ndarray):
     pass

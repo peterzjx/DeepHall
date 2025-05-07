@@ -9,12 +9,15 @@ def drift_velocity(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
     return grad_psi(params, model, electrons)
 
 def psi(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
+    # TODO: take modulus
     return model.apply({'params': params}, electrons)
 
 def local_energy(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
+    # TODO: import or copy from hamiltonian.py
     pass
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
+    # TODO: change input to theta and phi
     x = electrons[..., 0]
     y = electrons[..., 1]
     tmp = 1 + x**2 + y**2
