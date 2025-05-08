@@ -7,15 +7,9 @@ from jax import numpy as jnp
 from chex import ArrayTree, PRNGKey
 import deephall.dmc.velocity_utils as v_utils
 from deephall import constants
-from deephall.types import LogPsiNetwork
+from deephall.types import WalkerState, LogPsiNetwork
 
 
-class WalkerState(NamedTuple):
-    electrons: jnp.ndarray
-    v: jnp.ndarray
-    psi: jnp.ndarray
-    local_energy: jnp.ndarray
-    weights: jnp.ndarray
 
 
 def log_green_function_branching(local_energy: jnp.ndarray, next_local_energy: jnp.ndarray, kappa_tau: float, total_mean_energy: float):
@@ -65,15 +59,18 @@ def calculate_move(key: PRNGKey, v: jnp.ndarray, d0: float, tau: float):
         d0: d metric
         tau: time step
     '''
+    print('vshape', v.shape)
+    print('d0', d0.shape)
     move = (
         jax.random.normal(
             key=key,
-            shape=v.shape,
-            mean=jnp.zeros_like(v),
-            std=jnp.sqrt(d0) * jnp.sqrt(tau)  # isotropic along x and y
-        )
+            shape=v.shape
+            # mean=jnp.zeros_like(v), #TODO: Check if mean is needed. This is not defined in normal()
+            # std=jnp.sqrt(d0) * jnp.sqrt(tau)  # isotropic along x and y
+        ) * jnp.sqrt(d0) * jnp.sqrt(tau)
         + v * tau
     )
+    
     return move
 
 
