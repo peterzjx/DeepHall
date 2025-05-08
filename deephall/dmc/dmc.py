@@ -8,7 +8,7 @@ from chex import ArrayTree, PRNGKey
 import deephall.dmc.velocity_utils as v_utils
 from deephall import constants
 from deephall.types import WalkerState, LogPsiNetwork
-
+from deephall.config import Config
 
 
 
@@ -26,8 +26,8 @@ def reweight_walkers(weights: jnp.ndarray, local_energy: jnp.ndarray, next_local
     weights = jnp.sqrt(n_walkers) * weights / jnp.linalg.norm(weights)  # TODO: check if this is correct    
     return weights
 
-def calculate_d_metric():
-    pass
+# def calculate_d_metric():
+#     pass
 
 
 def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: jnp.ndarray, psi: jnp.ndarray, next_psi: jnp.ndarray, v: jnp.ndarray, next_v: jnp.ndarray, d: float, next_d: float, tau: float):
@@ -60,6 +60,8 @@ def calculate_move(key: PRNGKey, v: jnp.ndarray, d0: float, tau: float):
         tau: time step
     '''
     print('vshape', v.shape)
+    
+    d0 = jnp.stack([d0, d0], axis=-1)
     print('d0', d0.shape)
     move = (
         jax.random.normal(
@@ -91,7 +93,7 @@ def log_green_function(electrons_from: jnp.ndarray, electrons_to: jnp.ndarray, v
     return jnp.sum(expo, axis=1) - 2.0 * jnp.sum(jnp.log(d), axis=1)
 
 
-def step(key: PRNGKey, params: ArrayTree, model: nn.Module, walker_state: WalkerState, tau: float):
+def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_state: WalkerState, tau: float):
     '''
         key: jax.random.PRNGKey
         params: network parameters
@@ -100,11 +102,12 @@ def step(key: PRNGKey, params: ArrayTree, model: nn.Module, walker_state: Walker
         tau: time step
     '''
     key, key_move, key_accept = jax.random.split(key, 3)
-    d0 = v_utils.calculate_d_metric(walker_state.electrons)
+    d0 = v_utils.calculate_d_metric(walker_state.electrons) #TODO: _2Q is set to 9 by default. need to be specified
     move = calculate_move(key_move, walker_state.v, d0, tau)
     trial_electrons = walker_state.electrons + move
+    next_psi = v_utils.calc_psi(params, model, trial_electrons)
     next_v = v_utils.drift_velocity(params, model, trial_electrons)
-    next_psi = v_utils.psi(params, model, trial_electrons)
+    
 
     accepted_idx = calculate_acceptance(key_accept, walker_state.psi, next_psi, walker_state.v, next_v)
     num_accepted = jnp.sum(accepted_idx)
@@ -150,7 +153,7 @@ def make_dmc_step(batch_network: LogPsiNetwork, batch_per_device: int, steps: in
         """
 
         def step_fn(i, walker_state):
-            return step(key, params, batch_network, walker_state, tau=0.01)
+            return dmc_update(key, params, batch_network, walker_state, tau=0.001)
 
         walker_state, key, _, num_accepts = lax.fori_loop(
             0, steps, step_fn, init_walker_state

@@ -165,24 +165,24 @@ def sample_test(cfg: Config):
             logger.info("Initial energy: %s", initial_stats["energy"][0].real)
 
 
-def cli(argv: list[str] | None = None) -> None:
-    parser = ArgumentParser(
-        prog="deephall",
-        description="Simulating the fractional quantum Hall effect (FQHE) with "
-        "neural network variational Monte Carlo.",
-    )
-    parser.add_argument(
-        "dotlist", help="path.to.key=value pairs for configuration", nargs="*"
-    )
-    parser.add_argument("--yml", help="config YML file to merge")
-    args = parser.parse_args(argv or sys.argv[1:] or ["--help"])
+# def cli(argv: list[str] | None = None) -> None:
+#     parser = ArgumentParser(
+#         prog="deephall",
+#         description="Simulating the fractional quantum Hall effect (FQHE) with "
+#         "neural network variational Monte Carlo.",
+#     )
+#     parser.add_argument(
+#         "dotlist", help="path.to.key=value pairs for configuration", nargs="*"
+#     )
+#     parser.add_argument("--yml", help="config YML file to merge")
+#     args = parser.parse_args(argv or sys.argv[1:] or ["--help"])
 
-    config = OmegaConf.structured(Config)
-    if args.yml:
-        config = OmegaConf.merge(config, OmegaConf.load(args.yml))
-    config = OmegaConf.merge(config, OmegaConf.from_dotlist(args.dotlist))
-    sample_test(Config.from_dict(config))
+#     config = OmegaConf.structured(Config)
+#     if args.yml:
+#         config = OmegaConf.merge(config, OmegaConf.load(args.yml))
+#     config = OmegaConf.merge(config, OmegaConf.from_dotlist(args.dotlist))
+#     sample_test(Config.from_dict(config))
 
 
-if __name__ == "__main__":
-    cli()
+# if __name__ == "__main__":
+#     cli()

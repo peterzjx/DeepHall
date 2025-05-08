@@ -4,11 +4,12 @@ from flax import linen as nn
 import jax
 
 def drift_velocity(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
-    psi = psi(params, model, electrons)
+    psi = calc_psi(params, model, electrons) #TODO: bug here
+    print(psi)
     grad_psi = jax.grad(psi, argnums=1)
     return grad_psi(params, model, electrons)
 
-def psi(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
+def calc_psi(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
     # TODO: take modulus
     return model.apply({'params': params}, electrons)
 
@@ -21,4 +22,5 @@ def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
     x = electrons[..., 0]
     y = electrons[..., 1]
     tmp = 1 + x**2 + y**2
-    return tmp**2 / (2.0 * _2Q)
+    tmp = tmp**2 / (2.0 * _2Q)
+    return tmp
