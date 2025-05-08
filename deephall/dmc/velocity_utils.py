@@ -2,20 +2,24 @@ from chex import ArrayTree
 from jax import numpy as jnp
 from flax import linen as nn
 import jax
+from deephall.types import LogPsiNetwork
+from deephall import hamiltonian
 
-def drift_velocity(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
-    psi = calc_psi(params, model, electrons) #TODO: bug here
-    print(psi)
-    grad_psi = jax.grad(psi, argnums=1)
-    return grad_psi(params, model, electrons)
+def drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
+    grad_logpsi = jax.jacobian(model, argnums=1)
+    # print('grad_lnpsi', grad_logpsi)
+    return grad_logpsi(params, electrons)
 
-def calc_psi(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
+def logPsi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
     # TODO: take modulus
-    return model.apply({'params': params}, electrons)
+    logpsi = model(params, electrons).real
+    return logpsi
 
-def local_energy(params: ArrayTree, model: nn.Module, electrons: jnp.ndarray):
-    # TODO: import or copy from hamiltonian.py
+def local_energy(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
     pass
+    # TODO: import or copy from hamiltonian.py
+    # energy = hamiltonian.local_energy(model, system: System)(electrons)
+    # return energy
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
     # TODO: change input to theta and phi

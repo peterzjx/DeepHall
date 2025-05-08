@@ -105,7 +105,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_sta
     d0 = v_utils.calculate_d_metric(walker_state.electrons) #TODO: _2Q is set to 9 by default. need to be specified
     move = calculate_move(key_move, walker_state.v, d0, tau)
     trial_electrons = walker_state.electrons + move
-    next_psi = v_utils.calc_psi(params, model, trial_electrons)
+    next_psi = v_utils.logPsi(params, model, trial_electrons)
     next_v = v_utils.drift_velocity(params, model, trial_electrons)
     
 
