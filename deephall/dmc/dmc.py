@@ -26,9 +26,6 @@ def reweight_walkers(weights: jnp.ndarray, local_energy: jnp.ndarray, next_local
     weights = jnp.sqrt(n_walkers) * weights / jnp.linalg.norm(weights)  # TODO: check if this is correct    
     return weights
 
-# def calculate_d_metric():
-#     pass
-
 
 def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: jnp.ndarray, psi: jnp.ndarray, next_psi: jnp.ndarray, v: jnp.ndarray, next_v: jnp.ndarray, d: float, next_d: float, tau: float):
     '''
@@ -39,10 +36,16 @@ def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: j
         next_psi: next psi
         v: current velocity
         next_v: next velocity
-        d0: d metric
+        d: d metric
+        next_d: next d metric
         tau: time step
     '''
 
+    print('next_electrons', next_electrons.shape)
+    print('next_v', next_v.shape)
+    print('next_d', next_d.shape)
+    print('psi', psi.shape)
+    print('next_psi', next_psi.shape)
     log_green_function_forward = log_green_function(electrons, next_electrons, v, d, tau)
     log_green_function_backward = log_green_function(next_electrons, electrons, next_v, next_d, tau)
 
@@ -59,16 +62,10 @@ def calculate_move(key: PRNGKey, v: jnp.ndarray, d0: float, tau: float):
         d0: d metric
         tau: time step
     '''
-    print('vshape', v.shape)
-    
-    d0 = jnp.stack([d0, d0], axis=-1)
-    print('d0', d0.shape)
     move = (
         jax.random.normal(
             key=key,
             shape=v.shape
-            # mean=jnp.zeros_like(v), #TODO: Check if mean is needed. This is not defined in normal()
-            # std=jnp.sqrt(d0) * jnp.sqrt(tau)  # isotropic along x and y
         ) * jnp.sqrt(d0) * jnp.sqrt(tau)
         + v * tau
     )
@@ -84,13 +81,15 @@ def log_green_function(electrons_from: jnp.ndarray, electrons_to: jnp.ndarray, v
         d: d metric
         tau: time step
     '''
-    displacement = electrons_to - electrons_from - v_from * d * tau
+    displacement = electrons_to - electrons_from - v_from * d * tau  # (n_walkers, n_electrons, 2)
     squared_distances = jnp.sum(displacement ** 2, axis=-1)  # (n_walkers, n_electrons)
 
-    expo = -0.5 * squared_distances / (d * tau)  # (n_walkers, n_electrons)
+    expo = -0.5 * squared_distances / (jnp.squeeze(d, axis=-1) * tau)  # (n_walkers, n_electrons)
+
+    print('expo', expo.shape)
 
     # Sum over electrons and add log term
-    return jnp.sum(expo, axis=1) - 2.0 * jnp.sum(jnp.log(d), axis=1)
+    return jnp.sum(expo, axis=1) - 2.0 * jnp.sum(jnp.log(jnp.squeeze(d, axis=-1)), axis=1)
 
 
 def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_state: WalkerState, tau: float):
@@ -105,16 +104,16 @@ def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_sta
     d0 = v_utils.calculate_d_metric(walker_state.electrons) #TODO: _2Q is set to 9 by default. need to be specified
     move = calculate_move(key_move, walker_state.v, d0, tau)
     trial_electrons = walker_state.electrons + move
-    next_psi = v_utils.logPsi(params, model, trial_electrons)
+    next_psi = v_utils.log_psi(params, model, trial_electrons)
     next_v = v_utils.drift_velocity(params, model, trial_electrons)
-    
+    next_d = v_utils.calculate_d_metric(trial_electrons)
 
-    accepted_idx = calculate_acceptance(key_accept, walker_state.psi, next_psi, walker_state.v, next_v)
+    accepted_idx = calculate_acceptance(key_accept, walker_state.electrons,trial_electrons, walker_state.psi, next_psi, walker_state.v, next_v, d0, next_d, tau)
     num_accepted = jnp.sum(accepted_idx)
 
     # update the walkers according to the acceptance
-    next_electrons = jnp.where(accepted_idx, trial_electrons, walker_state.electrons)
-    next_v = jnp.where(accepted_idx, next_v, walker_state.v)
+    next_electrons = jnp.where(accepted_idx[..., None, None], trial_electrons, walker_state.electrons)
+    next_v = jnp.where(accepted_idx[..., None, None], next_v, walker_state.v)
     next_psi = jnp.where(accepted_idx, next_psi, walker_state.psi)
 
     next_local_energy = v_utils.local_energy(params, model, next_electrons)

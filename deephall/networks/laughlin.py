@@ -51,12 +51,14 @@ class Laughlin(nn.Module):
         assert int(diff) == diff, f"Impossible Lz={self.excitation_lz} for excitation"
 
     def __call__(self, electrons):
+        print('electrons in __call__', electrons.shape)
         orbitals = self.orbitals(electrons)
         signs, logdets = jnp.linalg.slogdet(orbitals)  # Jain P152
         logmax = jnp.max(logdets)  # logsumexp trick
         return jnp.log(jnp.sum(signs * jnp.exp(logdets - logmax))) + logmax
 
     def orbitals(self, electrons):
+        print('electrons in orbitals', electrons.shape)
         theta, phi = electrons[..., 0], electrons[..., 1]
         u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]
         v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]

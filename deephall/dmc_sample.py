@@ -66,12 +66,18 @@ def initalize_state(cfg: Config, model: nn.Module):
     params = kfac_jax.utils.replicate_all_local_devices(
         model.init(key_params, coords[0, 0])
     )
+    # TODO: calculate initial logpsi and v, after loading a pretrained params
+    # logpsi_0 = v_utils.log_psi(params, model, coords)  # [nwalkers,]
+    # v_0 = v_utils.drift_velocity(params, model, coords)
+
+    v_0 = jnp.ones((coords.shape[0],))
+    logpsi_0 = jnp.ones((coords.shape[0],))
     walker_state = WalkerState(
         electrons=coords,
-        v=jnp.zeros_like(coords),
-        psi=jnp.ones_like(coords),
-        local_energy=jnp.zeros_like(coords),
-        weights=jnp.ones_like(coords)
+        v=v_0,
+        psi=logpsi_0,
+        local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
+        weights=jnp.ones_like(logpsi_0)
     )
 
     # initial_step, (params, walker_state, opt_state)
