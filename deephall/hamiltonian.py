@@ -74,6 +74,7 @@ def make_potential(
         xyz_data = jnp.stack(
             [sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)], axis=-1
         )
+        print('xyz', xyz_data.shape)
         cos12 = jnp.einsum("ia,ja->ij", xyz_data, xyz_data)
         return potential_function(cos12)
 

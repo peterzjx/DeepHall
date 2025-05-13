@@ -2,6 +2,7 @@ from chex import ArrayTree
 from jax import numpy as jnp
 from flax import linen as nn
 import jax
+from deephall.config import System
 from deephall.types import LogPsiNetwork
 from deephall import hamiltonian
 
@@ -28,11 +29,13 @@ def log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
     logpsi = model(params, electrons).real
     return logpsi
 
-def local_energy(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
-    pass
+def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, electrons: jnp.ndarray):
+    # pass
     # TODO: import or copy from hamiltonian.py
-    # energy = hamiltonian.local_energy(model, system: System)(electrons)
-    # return energy
+    # _e_l = hamiltonian.local_energy(model, system)
+    loss_fn = hamiltonian.local_energy(model, system)
+    batch_local_energy = jax.vmap(loss_fn, in_axes=(None, 0))
+    return batch_local_energy(params, electrons)
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
     # TODO: change input to theta and phi

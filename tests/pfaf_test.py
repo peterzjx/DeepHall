@@ -23,7 +23,7 @@ for Ne in [4]:
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"
-        config.log.save_path = f"attention_pfaf_{Ne}_kappa_{kappa}"
+        config.log.save_path = f"../log/attention_pfaf_{Ne}_kappa_{kappa}"
         train(config)
 
         # config = Config(network=Network(type=NetworkType.psiformer))

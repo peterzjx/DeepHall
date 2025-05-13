@@ -17,8 +17,8 @@ from pytest import CaptureFixture
 def simple_config():
     config = Config(network=Network(type=NetworkType.laughlin))
     config.system.interaction_strength = 1.0
-    config.system.nspins = (4, 0)
-    config.system.flux = 9
+    config.system.nspins = (5, 0)
+    config.system.flux = 12
     config.optim.iterations = 10000
     config.batch_size = 792
     config.mcmc.width = 0.3

@@ -88,6 +88,7 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
     batch_network = jax.vmap(network, in_axes=(None, 0))
     if cfg.mcmc.use_dmc:
         mcmc_step = dmc.make_dmc_step(
+            cfg.system,
             batch_network,
             batch_per_device=cfg.batch_size // jax.device_count(),
             steps=cfg.mcmc.steps,

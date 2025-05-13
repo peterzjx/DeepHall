@@ -8,7 +8,7 @@ from chex import ArrayTree, PRNGKey
 import deephall.dmc.velocity_utils as v_utils
 from deephall import constants
 from deephall.types import WalkerState, LogPsiNetwork
-from deephall.config import Config
+from deephall.config import Config, System
 
 
 
@@ -17,6 +17,8 @@ def log_green_function_branching(local_energy: jnp.ndarray, next_local_energy: j
         local_energy: current local energy
         next_local_energy: next local energy
     '''
+    # print('energy shape', next_local_energy.shape)
+    print('mean energy', total_mean_energy)
     return -kappa_tau * (next_local_energy + local_energy - 2 * total_mean_energy)
 
 
@@ -92,7 +94,7 @@ def log_green_function(electrons_from: jnp.ndarray, electrons_to: jnp.ndarray, v
     return jnp.sum(expo, axis=1) - 2.0 * jnp.sum(jnp.log(jnp.squeeze(d, axis=-1)), axis=1)
 
 
-def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_state: WalkerState, tau: float):
+def dmc_update(key: PRNGKey, params: ArrayTree, system: System,  model: LogPsiNetwork, walker_state: WalkerState, tau: float):
     '''
         key: jax.random.PRNGKey
         params: network parameters
@@ -116,10 +118,10 @@ def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_sta
     next_v = jnp.where(accepted_idx[..., None, None], next_v, walker_state.v)
     next_psi = jnp.where(accepted_idx, next_psi, walker_state.psi)
 
-    next_local_energy = v_utils.local_energy(params, model, next_electrons)
+    next_local_energy = v_utils.batch_local_energy(params, system, model, next_electrons)
 
-    kappa_tau = 1.0  # TODO: get from params
-    total_mean_energy = 0.0  # TODO: get from params
+    kappa_tau = 1.0  # TODO: get from system
+    total_mean_energy = 0.0  # TODO: get from all batches
 
     next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, kappa_tau, total_mean_energy)
 
@@ -134,7 +136,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, model: LogPsiNetwork, walker_sta
     return next_walker_state, key, next_local_energy, num_accepted
 
 
-def make_dmc_step(batch_network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
+def make_dmc_step(system: System, batch_network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
     @jax.jit
     def dmc_step(
         params: ArrayTree, init_walker_state: WalkerState, key: PRNGKey,
@@ -152,7 +154,7 @@ def make_dmc_step(batch_network: LogPsiNetwork, batch_per_device: int, steps: in
         """
 
         def step_fn(i, walker_state):
-            return dmc_update(key, params, batch_network, walker_state, tau=0.001)
+            return dmc_update(key, params, system, batch_network, walker_state, tau=0.001)
 
         walker_state, key, _, num_accepts = lax.fori_loop(
             0, steps, step_fn, init_walker_state
