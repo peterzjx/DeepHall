@@ -18,7 +18,10 @@ def log_green_function_branching(local_energy: jnp.ndarray, next_local_energy: j
         next_local_energy: next local energy
     '''
     # print('energy shape', next_local_energy.shape)
-    print('mean energy', total_mean_energy)
+    print('kappa_tau', kappa_tau)
+    print('local_energy', local_energy.shape)
+    print('next_local_energy', next_local_energy.shape)
+    print('total_mean_energy', total_mean_energy)
     return -kappa_tau * (next_local_energy + local_energy - 2 * total_mean_energy)
 
 
@@ -94,7 +97,7 @@ def log_green_function(electrons_from: jnp.ndarray, electrons_to: jnp.ndarray, v
     return jnp.sum(expo, axis=1) - 2.0 * jnp.sum(jnp.log(jnp.squeeze(d, axis=-1)), axis=1)
 
 
-def dmc_update(key: PRNGKey, params: ArrayTree, system: System,  model: LogPsiNetwork, walker_state: WalkerState, tau: float):
+def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNetwork, walker_state: WalkerState, num_accepted: int, tau: float):
     '''
         key: jax.random.PRNGKey
         params: network parameters
@@ -106,12 +109,12 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System,  model: LogPsiNe
     d0 = v_utils.calculate_d_metric(walker_state.electrons) #TODO: _2Q is set to 9 by default. need to be specified
     move = calculate_move(key_move, walker_state.v, d0, tau)
     trial_electrons = walker_state.electrons + move
-    next_psi = v_utils.log_psi(params, model, trial_electrons)
-    next_v = v_utils.drift_velocity(params, model, trial_electrons)
+    next_psi = v_utils.batch_log_psi(params, model, trial_electrons)
+    next_v = v_utils.batch_drift_velocity(params, model, trial_electrons)
     next_d = v_utils.calculate_d_metric(trial_electrons)
 
     accepted_idx = calculate_acceptance(key_accept, walker_state.electrons,trial_electrons, walker_state.psi, next_psi, walker_state.v, next_v, d0, next_d, tau)
-    num_accepted = jnp.sum(accepted_idx)
+    num_accepted += jnp.sum(accepted_idx)
 
     # update the walkers according to the acceptance
     next_electrons = jnp.where(accepted_idx[..., None, None], trial_electrons, walker_state.electrons)
@@ -133,10 +136,10 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System,  model: LogPsiNe
         weights=next_walker_weights
     )
 
-    return next_walker_state, key, next_local_energy, num_accepted
+    return next_walker_state, key, num_accepted
 
 
-def make_dmc_step(system: System, batch_network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
+def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
     @jax.jit
     def dmc_step(
         params: ArrayTree, init_walker_state: WalkerState, key: PRNGKey,
@@ -153,11 +156,13 @@ def make_dmc_step(system: System, batch_network: LogPsiNetwork, batch_per_device
         updated RNG state and pmove the average probability a move was accepted.
         """
 
-        def step_fn(i, walker_state):
-            return dmc_update(key, params, system, batch_network, walker_state, tau=0.001)
-
-        walker_state, key, _, num_accepts = lax.fori_loop(
-            0, steps, step_fn, init_walker_state
+        def step_fn(i, t):
+            walker_state, key, num_accepts = t
+            return dmc_update(key, params, system, network, walker_state, num_accepts, tau=0.001)
+        
+        # TODO: fix local energy to a meaningful value
+        walker_state, key, num_accepts = lax.fori_loop(
+            0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
         )
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)

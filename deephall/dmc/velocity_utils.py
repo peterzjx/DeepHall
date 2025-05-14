@@ -6,7 +6,7 @@ from deephall.config import System
 from deephall.types import LogPsiNetwork
 from deephall import hamiltonian
 
-def drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
+def batch_drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
     """
         electrons: [nwalkers, nelec, 2]
     """
@@ -18,27 +18,22 @@ def drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarr
     #     model_output = model(params, electrons[None, ...]).real
     #     return jnp.squeeze(model_output, axis=0)
     print('electrons in drift velocity', electrons.shape)
-    grad_fn = jax.grad(lambda x: model(params, x))
+    grad_fn = jax.grad(lambda x: model(params, x).real)
+    batch_grad_fn = jax.vmap(grad_fn, in_axes=0)
+    batch_grad_logpsi = batch_grad_fn(electrons)  # [nwalkers, nelec, 2]
+    print('batch_grad_logpsi', batch_grad_logpsi)
+    return batch_grad_logpsi
 
-    print('grad_fn(electrons[0])', grad_fn(electrons[0]).shape)
-    # Vectorize over the walker dimension
-    batched_grad = jax.vmap(grad_fn, in_axes=0)
-    print('electrons', electrons.shape)
-    grad_logpsi = batched_grad(electrons)  # [nwalkers, nelec, 2]
-    print('grad_logpsi', grad_logpsi)
-    return grad_logpsi
-
-def log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
-    logpsi = model(params, electrons).real
+def batch_log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
+    batch_model = jax.vmap(model, in_axes=(None, 0))
+    logpsi = batch_model(params, electrons).real
     return logpsi
 
 def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, electrons: jnp.ndarray):
-    # pass
-    # TODO: import or copy from hamiltonian.py
-    # _e_l = hamiltonian.local_energy(model, system)
-    local_energy_fn = hamiltonian.local_energy(model, system)
+    # hamiltonian.local_energy takes non-batched electrons
+    local_energy_fn = hamiltonian.local_energy(model, system)  
     batch_local_energy = jax.vmap(local_energy_fn, in_axes=(None, 0))
-    return batch_local_energy(params, electrons)
+    return batch_local_energy(params, electrons)[0]  # only take total energy
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
     # TODO: change input to theta and phi
