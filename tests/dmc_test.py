@@ -17,8 +17,10 @@ from pytest import CaptureFixture
 def simple_config():
     config = Config(network=Network(type=NetworkType.laughlin))
     config.system.interaction_strength = 1.0
-    config.system.nspins = (5, 0)
-    config.system.flux = 12
+    config.system.nspins = (4, 0)
+    config.system.flux = 9
+    config.system.tau = 0.001
+    config.system.kappa = 1.0
     config.optim.iterations = 10000
     config.batch_size = 792
     config.mcmc.width = 0.3
@@ -38,10 +40,12 @@ def test_initalize_state(simple_config: Config, tmp_path: Path, capsys: CaptureF
     model = dmc_sample.make_network(simple_config.system, simple_config.network)
     network = dmc_sample.cast(LogPsiNetwork, model.apply)
     pmap_mcmc_step, pmoves = dmc_sample.setup_mcmc(simple_config, network)
+    print('initial setup_mcmc done')
     assert simple_config.log.pretrained_path is not None
     initial_step, (params, walker_state, subkey) = (
         dmc_sample.initalize_state(simple_config, model)
     )
+    print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.psi.shape) # [device, batch, Ne, 2]
     # _, (params, _, _) = (
     #     log_manager.try_load_pretrained_checkpoint()
     # )

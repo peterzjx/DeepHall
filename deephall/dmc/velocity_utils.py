@@ -31,9 +31,9 @@ def batch_log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarra
 
 def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, electrons: jnp.ndarray):
     # hamiltonian.local_energy takes non-batched electrons
-    local_energy_fn = hamiltonian.local_energy(model, system)  
+    local_energy_fn = hamiltonian.local_energy(model, system)
     batch_local_energy = jax.vmap(local_energy_fn, in_axes=(None, 0))
-    return batch_local_energy(params, electrons)[0]  # only take total energy
+    return batch_local_energy(params, electrons)[0].real  # only take total energy
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
     # TODO: change input to theta and phi

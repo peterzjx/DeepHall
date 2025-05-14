@@ -62,7 +62,14 @@ def init_guess(key: PRNGKey, batch: int, nelec: int):
 def initalize_state(cfg: Config, model: nn.Module):
     key_data, key_params = jax.random.split(jax.random.PRNGKey(cfg.seed))
     coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
-    coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
+    v_0 = jnp.ones_like(coords)
+    logpsi_0 = jnp.ones(coords.shape[:-2])
+    print('init shape', coords.shape, v_0.shape, logpsi_0.shape)
+    
+    coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:])) #[device_num, batch, Ne, 2]
+    v_0 = v_0.reshape((jax.device_count(), -1, *v_0.shape[-2:]))
+    logpsi_0 = logpsi_0.reshape((jax.device_count(), -1))
+    print('reshaped to devices: shape', coords.shape, v_0.shape, logpsi_0.shape)
     params = kfac_jax.utils.replicate_all_local_devices(
         model.init(key_params, coords[0, 0])
     )
@@ -70,8 +77,7 @@ def initalize_state(cfg: Config, model: nn.Module):
     # logpsi_0 = v_utils.log_psi(params, model, coords)  # [nwalkers,]
     # v_0 = v_utils.drift_velocity(params, model, coords)
 
-    v_0 = jnp.ones((coords.shape[0],))
-    logpsi_0 = jnp.ones((coords.shape[0],))
+    
     walker_state = WalkerState(
         electrons=coords,
         v=v_0,
@@ -99,17 +105,17 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
     return pmap_mcmc_step, pmoves
 
 
-def update_walker_state_from_pretrained(cfg: Config, model: nn.Module, params: ArrayTree, walker_state: WalkerState):
-    psi = v_utils.psi(params, model, walker_state.electrons)
-    v = v_utils.drift_velocity(params, model, walker_state.electrons)
-    energy = v_utils.local_energy(params, model, walker_state.electrons)
-    return WalkerState(
-        electrons=walker_state.electrons,
-        v=v,
-        psi=psi,
-        local_energy=energy,
-        weights=walker_state.weights
-    )
+# def update_walker_state_from_pretrained(cfg: Config, model: nn.Module, params: ArrayTree, walker_state: WalkerState):
+#     psi = v_utils.psi(params, model, walker_state.electrons)
+#     v = v_utils.drift_velocity(params, model, walker_state.electrons)
+#     energy = v_utils.local_energy(params, model, walker_state.electrons)
+#     return WalkerState(
+#         electrons=walker_state.electrons,
+#         v=v,
+#         psi=psi,
+#         local_energy=energy,
+#         weights=walker_state.weights
+#     )
 
 # def sample_test(cfg: Config):
 #     init_logging()

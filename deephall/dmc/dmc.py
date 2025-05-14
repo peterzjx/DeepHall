@@ -123,7 +123,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
 
     next_local_energy = v_utils.batch_local_energy(params, system, model, next_electrons)
 
-    kappa_tau = 1.0  # TODO: get from system
+    kappa_tau = system.interaction_strength * system.tau
     total_mean_energy = 0.0  # TODO: get from all batches
 
     next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, kappa_tau, total_mean_energy)
@@ -158,9 +158,11 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
 
         def step_fn(i, t):
             walker_state, key, num_accepts = t
+            print('in dmc_step / step_fn', walker_state)
             return dmc_update(key, params, system, network, walker_state, num_accepts, tau=0.001)
         
         # TODO: fix local energy to a meaningful value
+        
         walker_state, key, num_accepts = lax.fori_loop(
             0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
         )
