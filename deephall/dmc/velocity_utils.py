@@ -12,12 +12,15 @@ def drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarr
     """
     # TODO: convert between xy and theta, phi
 
-    def helper(params, electrons):
-        print('electrons in helper', electrons[None, ...].shape)
-        model_output = model(params, electrons[None, ...]).real
-        return jnp.squeeze(model_output, axis=0)
+    # def helper(params, electrons):
+    #     print('electrons in helper', electrons.shape)
+    #     print('after unsqueeze', electrons[None, ...].shape)
+    #     model_output = model(params, electrons[None, ...]).real
+    #     return jnp.squeeze(model_output, axis=0)
+    print('electrons in drift velocity', electrons.shape)
+    grad_fn = jax.grad(lambda x: model(params, x))
 
-    grad_fn = jax.grad(lambda x: helper(params, x))
+    print('grad_fn(electrons[0])', grad_fn(electrons[0]).shape)
     # Vectorize over the walker dimension
     batched_grad = jax.vmap(grad_fn, in_axes=0)
     print('electrons', electrons.shape)
@@ -33,8 +36,8 @@ def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, 
     # pass
     # TODO: import or copy from hamiltonian.py
     # _e_l = hamiltonian.local_energy(model, system)
-    loss_fn = hamiltonian.local_energy(model, system)
-    batch_local_energy = jax.vmap(loss_fn, in_axes=(None, 0))
+    local_energy_fn = hamiltonian.local_energy(model, system)
+    batch_local_energy = jax.vmap(local_energy_fn, in_axes=(None, 0))
     return batch_local_energy(params, electrons)
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):

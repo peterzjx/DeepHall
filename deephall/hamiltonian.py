@@ -74,7 +74,7 @@ def make_potential(
         xyz_data = jnp.stack(
             [sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)], axis=-1
         )
-        print('xyz', xyz_data.shape)
+        assert len(xyz_data.shape) == 2  # (n_electrons, 3)
         cos12 = jnp.einsum("ia,ja->ij", xyz_data, xyz_data)
         return potential_function(cos12)
 
@@ -203,6 +203,7 @@ def local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
         Returns:
             Local energy and other observables.
         """
+        print('data in _e_l', data.shape)
         potential = pe(data) * system.interaction_strength
         kinetic, angular_momenta = ke(params, data)
         return kinetic + potential, angular_momenta | {

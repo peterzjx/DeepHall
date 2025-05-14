@@ -59,6 +59,7 @@ class Laughlin(nn.Module):
 
     def orbitals(self, electrons):
         print('electrons in orbitals', electrons.shape)
+        assert len(electrons.shape) == 2  # (n_electrons, 2)
         theta, phi = electrons[..., 0], electrons[..., 1]
         u = (jnp.cos(theta / 2) * jnp.exp(0.5j * phi))[..., None]
         v = (jnp.sin(theta / 2) * jnp.exp(-0.5j * phi))[..., None]

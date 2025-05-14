@@ -7,13 +7,13 @@ from datetime import datetime
 
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 for Ne in [4]:
-    for kappa in [0.5]:
+    for kappa in [2.0]:
         config = Config(network=Network(
-            type=NetworkType.parton,
-            parton=PartonNetwork(
-                fermionic_type=FermionicType.pfaffian,
-                flux_type=FluxType.symmetric_mlp_network
-            )
+            type=NetworkType.laughlin,
+            # parton=PartonNetwork(
+            #     fermionic_type=FermionicType.pfaffian,
+            #     flux_type=FluxType.symmetric_mlp_network
+            # )
         ))
         config.system.interaction_strength = kappa
         config.system.nspins = (Ne, 0)
@@ -23,7 +23,7 @@ for Ne in [4]:
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"
-        config.log.save_path = f"../log/attention_pfaf_{Ne}_kappa_{kappa}"
+        config.log.save_path = f"../logs/laughlin_{Ne}_kappa_{kappa}"
         train(config)
 
         # config = Config(network=Network(type=NetworkType.psiformer))
