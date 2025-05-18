@@ -60,18 +60,18 @@ def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: j
     return accepted_idx
 
 
-def calculate_move(key: PRNGKey, v: jnp.ndarray, d0: float, tau: float):
+def calculate_move(key: PRNGKey, v: jnp.ndarray, d_metric: float, tau: float):
     '''
         key: jax.random.PRNGKey
         v: velocity
-        d0: d metric
+        d_metric: d metric
         tau: time step
     '''
     move = (
         jax.random.normal(
             key=key,
             shape=v.shape
-        ) * jnp.sqrt(d0) * jnp.sqrt(tau)
+        ) * jnp.sqrt(d_metric) * jnp.sqrt(tau)
         + v * tau
     )
     
@@ -106,20 +106,20 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
         tau: time step
     '''
     key, key_move, key_accept = jax.random.split(key, 3)
-    d0 = v_utils.calculate_d_metric(walker_state.electrons) #TODO: _2Q is set to 9 by default. need to be specified
-    move = calculate_move(key_move, walker_state.v, d0, tau)
+    move = calculate_move(key_move, walker_state.v, walker_state.d_metric, tau)
     trial_electrons = walker_state.electrons + move
     next_psi = v_utils.batch_log_psi(params, model, trial_electrons)
     next_v = v_utils.batch_drift_velocity(params, model, trial_electrons)
     next_d = v_utils.calculate_d_metric(trial_electrons)
 
-    accepted_idx = calculate_acceptance(key_accept, walker_state.electrons,trial_electrons, walker_state.psi, next_psi, walker_state.v, next_v, d0, next_d, tau)
+    accepted_idx = calculate_acceptance(key_accept, walker_state.electrons,trial_electrons, walker_state.psi, next_psi, walker_state.v, next_v, walker_state.d_metric, next_d, tau)
     num_accepted += jnp.sum(accepted_idx)
 
     # update the walkers according to the acceptance
     next_electrons = jnp.where(accepted_idx[..., None, None], trial_electrons, walker_state.electrons)
     next_v = jnp.where(accepted_idx[..., None, None], next_v, walker_state.v)
     next_psi = jnp.where(accepted_idx, next_psi, walker_state.psi)
+    next_d = jnp.where(accepted_idx[..., None,None], next_d, walker_state.d_metric)
 
     next_local_energy = v_utils.batch_local_energy(params, system, model, next_electrons)
 
@@ -131,6 +131,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     next_walker_state = WalkerState(
         electrons=next_electrons,
         v=next_v,
+        d_metric=next_d,
         psi=next_psi,
         local_energy=next_local_energy,
         weights=next_walker_weights

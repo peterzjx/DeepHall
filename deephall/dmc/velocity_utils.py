@@ -10,19 +10,16 @@ def batch_drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp
     """
         electrons: [nwalkers, nelec, 2]
     """
-    # TODO: convert between xy and theta, phi
-
-    # def helper(params, electrons):
-    #     print('electrons in helper', electrons.shape)
-    #     print('after unsqueeze', electrons[None, ...].shape)
-    #     model_output = model(params, electrons[None, ...]).real
-    #     return jnp.squeeze(model_output, axis=0)
-    print('electrons in drift velocity', electrons.shape)
+    theta = electrons[..., 0]
+    phi = electrons[..., 1]
     grad_fn = jax.grad(lambda x: model(params, x).real)
     batch_grad_fn = jax.vmap(grad_fn, in_axes=0)
     batch_grad_logpsi = batch_grad_fn(electrons)  # [nwalkers, nelec, 2]
-    print('batch_grad_logpsi', batch_grad_logpsi)
-    return batch_grad_logpsi
+    inv_Jacob = jnp.array([[-2 * jnp.cos(phi) * jnp.sin(theta / 2)**2, -jnp.sin(phi) * jnp.tan(theta/2)],
+                           [-2 * jnp.sin(phi) * jnp.sin(theta / 2)**2,  jnp.cos(phi) * jnp.tan(theta/2)]])
+    inv_Jacob = jnp.transpose(inv_Jacob, [2,3,0,1])
+    drift_vxy = jnp.einsum('ijkl,ijl->ijk', inv_Jacob, batch_grad_logpsi)
+    return drift_vxy
 
 def batch_log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
     batch_model = jax.vmap(model, in_axes=(None, 0))
@@ -36,8 +33,8 @@ def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, 
     return batch_local_energy(params, electrons)[0].real  # only take total energy
 
 def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
-    # TODO: change input to theta and phi
-    x = electrons[..., 0]
-    y = electrons[..., 1]
-    d_metric = (1 + x**2 + y**2)**2 / (2.0 * _2Q)
+    theta = electrons[..., 0]
+    # phi = electrons[..., 1]
+    r = 1.0 / (1e-10 + jnp.tan(theta / 2))    
+    d_metric = (1 + r**2)**2 / (2.0 * _2Q)
     return jnp.expand_dims(d_metric, axis=-1)

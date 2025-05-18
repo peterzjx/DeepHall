@@ -7,7 +7,7 @@ from datetime import datetime
 
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 for Ne in [4]:
-    for kappa in [2.0]:
+    for kappa in [1.0]:
         config = Config(network=Network(
             type=NetworkType.laughlin,
             # parton=PartonNetwork(
