@@ -86,7 +86,8 @@ def initalize_state(cfg: Config, model: nn.Module):
         v=v_0,
         psi=logpsi_0,
         local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
-        weights=jnp.ones_like(logpsi_0)
+        weights=jnp.ones_like(logpsi_0),
+        dmc_mean_energy= jnp.zeros_like(logpsi_0)
     )
 
     # initial_step, (params, walker_state, opt_state)
@@ -99,7 +100,7 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
             cfg.system,
             network,
             batch_per_device=cfg.batch_size // jax.device_count(),
-            steps=cfg.mcmc.steps,
+            steps=cfg.mcmc.steps
         )
     else:
         pass
@@ -119,6 +120,21 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
 #         local_energy=energy,
 #         weights=walker_state.weights
 #     )
+def update_global_energy(walker_state: WalkerState, step: int, step_num2mean: int):
+    if step % step_num2mean == 0:
+        weighted_energy = jnp.sum(walker_state.weights * walker_state.local_energy) / jnp.sum(walker_state.weights)
+        print('xxxxx', weighted_energy, jnp.mean(walker_state.dmc_mean_energy), jnp.mean(walker_state.weights ))
+        # walker_state = walker_state._replace(dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy)
+        walker_state = WalkerState(
+            electrons=walker_state.electrons,
+            v=walker_state.v,
+            psi=walker_state.psi,
+            local_energy=walker_state.local_energy,
+            dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
+            weights=walker_state.weights,
+            d_metric=walker_state.d_metric
+        ) 
+        print('zzzz', weighted_energy, jnp.mean(walker_state.dmc_mean_energy), jnp.mean(walker_state.weights ))
 
 def sample_test(cfg: Config):
     init_logging()

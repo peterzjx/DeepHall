@@ -26,6 +26,7 @@ class WalkerState(NamedTuple):
     psi: jnp.ndarray
     local_energy: jnp.ndarray
     weights: jnp.ndarray
+    dmc_mean_energy: float
 
 class AngularMomenta(TypedDict):
     """Angular momenta is calculated with kinetic energy."""

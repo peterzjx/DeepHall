@@ -16,11 +16,11 @@ from pytest import CaptureFixture
 def simple_config():
     config = Config(network=Network(type=NetworkType.laughlin))
     config.seed = 1
-    config.system.interaction_strength = 1.0
     config.system.nspins = (4, 0)
     config.system.flux = 9
     config.system.tau = 0.001
-    config.system.kappa = 1.0
+    config.system.interaction_strength = 1.0
+    config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     config.optim.iterations = 100
     config.batch_size = 198
     config.mcmc.width = 0.3
@@ -28,7 +28,7 @@ def simple_config():
     config.log.pretrained_path = "../logs/laughlin4kappa1.0/ckpt_000999.npz"
     config.log.save_path = "../logs/laughlin4kappa1.0_pytest"
     config.mcmc.use_dmc = True
-    config.mcmc.burn_in = 10000
+    config.mcmc.burn_in = 20
     return config
 
 # def test_initalize_state(simple_config: Config, tmp_path: Path, capsys: CaptureFixture[str]):
@@ -82,14 +82,16 @@ def test_drift_velocity(simple_config: Config, tmp_path: Path, capsys: CaptureFi
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove = pmap_mcmc_step(params, walker_state, subkey)
-
+            dmc_sample.update_global_energy(walker_state=walker_state,step=step,step_num2mean=10)
             print('theta, phi = ', walker_state.electrons[0][0])
             print('Log(psi).real = ',walker_state.psi[0][0])
             print('velocity = ', walker_state.v[0][0])
             print('d-metric = ', walker_state.d_metric[0][0])
             print('E_L = ',walker_state.local_energy[0][0])
+            print('dmc_mean_energy_shape', walker_state.dmc_mean_energy.shape, walker_state.weights.shape, walker_state.local_energy.shape)
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
                 energy=f"{jnp.mean(walker_state.local_energy):.4f}",
+                dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.4f}"
             )

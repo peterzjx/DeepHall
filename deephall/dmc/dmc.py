@@ -91,7 +91,7 @@ def log_green_function(electrons_from: jnp.ndarray, electrons_to: jnp.ndarray, v
 
     expo = -0.5 * squared_distances / (jnp.squeeze(d, axis=-1) * tau)  # (n_walkers, n_electrons)
 
-    print('expo', expo.shape)
+    # print('expo', expo.shape)
 
     # Sum over electrons and add log term
     return jnp.sum(expo, axis=1) - 2.0 * jnp.sum(jnp.log(jnp.squeeze(d, axis=-1)), axis=1)
@@ -106,6 +106,8 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
         tau: time step
     '''
     key, key_move, key_accept = jax.random.split(key, 3)
+    # kappa_tau = system.kappa_tau
+    
     move = calculate_move(key_move, walker_state.v, walker_state.d_metric, tau)
     trial_electrons = walker_state.electrons + move
     next_psi = v_utils.batch_log_psi(params, model, trial_electrons)
@@ -123,20 +125,22 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
 
     next_local_energy = v_utils.batch_local_energy(params, system, model, next_electrons)
 
-    kappa_tau = system.interaction_strength * system.tau
-    total_mean_energy = 0.0  # TODO: get from all batches
+    
+    # total_mean_energy = walker_state.dmc_mean_energy
 
-    next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, kappa_tau, total_mean_energy)
-
+    # next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, kappa_tau, total_mean_energy)
+    next_walker_weights = walker_state.weights #without reweighting, it is identical to VMC TODO: verify that it resembles VMC
+    print('current dmc_mean E:', walker_state.dmc_mean_energy)
     next_walker_state = WalkerState(
         electrons=next_electrons,
         v=next_v,
         d_metric=next_d,
         psi=next_psi,
         local_energy=next_local_energy,
-        weights=next_walker_weights
+        weights=next_walker_weights,
+        dmc_mean_energy=walker_state.dmc_mean_energy
     )
-
+    print('next dmc_mean E:', next_walker_state.dmc_mean_energy)
     return next_walker_state, key, num_accepted
 
 
@@ -156,17 +160,19 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
         (data, pmove), where data is the updated DMC configurations, key the
         updated RNG state and pmove the average probability a move was accepted.
         """
-
+        print('in dmc_step / step_fn')
         def step_fn(i, t):
             walker_state, key, num_accepts = t
-            print('in dmc_step / step_fn', walker_state)
-            return dmc_update(key, params, system, network, walker_state, num_accepts, tau=0.001)
+            i = i+1
+            return dmc_update(key, params, system, network, walker_state, num_accepts, tau=system.kappa_tau)
         
         # TODO: fix local energy to a meaningful value
         
-        walker_state, key, num_accepts = lax.fori_loop(
-            0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
-        )
+        # walker_state, key, num_accepts = lax.fori_loop(
+        #     0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
+        # )
+
+        walker_state, key, num_accepts = step_fn( 0, (init_walker_state, key, 0))
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)
         return walker_state, pmove
@@ -176,3 +182,4 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
 
 def initialize_walker_state(electrons: jnp.ndarray):
     pass
+    
