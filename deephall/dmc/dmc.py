@@ -168,11 +168,11 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
         
         # TODO: fix local energy to a meaningful value
         
-        # walker_state, key, num_accepts = lax.fori_loop(
-        #     0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
-        # )
+        walker_state, key, num_accepts = lax.fori_loop(
+            0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
+        )
 
-        walker_state, key, num_accepts = step_fn( 0, (init_walker_state, key, 0))
+        # walker_state, key, num_accepts = step_fn( 0, (init_walker_state, key, 0))
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)
         return walker_state, pmove

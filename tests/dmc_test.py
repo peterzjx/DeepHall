@@ -28,7 +28,7 @@ def simple_config():
     config.log.pretrained_path = "../logs/laughlin4kappa1.0/ckpt_000999.npz"
     config.log.save_path = "../logs/laughlin4kappa1.0_pytest"
     config.mcmc.use_dmc = True
-    config.mcmc.burn_in = 20
+    config.mcmc.burn_in = 60
     return config
 
 # def test_initalize_state(simple_config: Config, tmp_path: Path, capsys: CaptureFixture[str]):
@@ -82,7 +82,7 @@ def test_drift_velocity(simple_config: Config, tmp_path: Path, capsys: CaptureFi
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove = pmap_mcmc_step(params, walker_state, subkey)
-            dmc_sample.update_global_energy(walker_state=walker_state,step=step,step_num2mean=10)
+            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=10)
             print('theta, phi = ', walker_state.electrons[0][0])
             print('Log(psi).real = ',walker_state.psi[0][0])
             print('velocity = ', walker_state.v[0][0])
