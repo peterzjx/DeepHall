@@ -120,11 +120,12 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
 #         local_energy=energy,
 #         weights=walker_state.weights
 #     )
-def update_global_energy(walker_state: WalkerState, step: int, step_num2mean: int):
-    if step % step_num2mean == 0:
+def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int):
+    if step % update_interval == 0:
         weighted_energy = jnp.sum(walker_state.weights * walker_state.local_energy) / jnp.sum(walker_state.weights)
-        print('xxxxx', weighted_energy, jnp.mean(walker_state.dmc_mean_energy), jnp.mean(walker_state.weights ))
+        print('step', step, 'xxxxx', weighted_energy, jnp.mean(walker_state.dmc_mean_energy), jnp.mean(walker_state.weights ))
         # walker_state = walker_state._replace(dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy)
+
         walker_state = WalkerState(
             electrons=walker_state.electrons,
             v=walker_state.v,
@@ -133,8 +134,10 @@ def update_global_energy(walker_state: WalkerState, step: int, step_num2mean: in
             dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
             weights=walker_state.weights,
             d_metric=walker_state.d_metric
-        ) 
-        print('zzzz', weighted_energy, jnp.mean(walker_state.dmc_mean_energy), jnp.mean(walker_state.weights ))
+        )
+        # TODO: check if jnp.mean(walker_state.dmc_mean_energy) and weighted_energy are the same
+        print('zzzz', f'{weighted_energy:.12f}', f'{jnp.mean(walker_state.dmc_mean_energy):.12f}', f'{jnp.mean(walker_state.weights):.12f}')
+    return walker_state
 
 def sample_test(cfg: Config):
     init_logging()
