@@ -1,18 +1,14 @@
-import jax.numpy as jnp
+import os
 
-def reconstruct_antisymmetric(n, values):
-    i, j = jnp.triu_indices(n, k=1)  # Upper triangle indices
-    M = jnp.zeros((n, n))  # Initialize zero matrix
-    M = M.at[i, j].set(values)  # Set upper triangle
-    return M - M.T  # Enforce antisymmetry directly
+# Set environment variables BEFORE importing jax
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # or to all GPUs: "0,1"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.8"
 
-# Example usage
-n = 3
-values = jnp.array([2, -3, 4])  # Extracted values from upper triangle
-M_reconstructed = reconstruct_antisymmetric(n, values)
+import jax
 
-print(M_reconstructed)
-# Expected output:
-# [[ 0  2 -3]
-#  [-2  0  4]
-#  [ 3 -4  0]]
+print("Outside test:", jax.devices())
+
+def test_jax_cuda():
+    print("Inside test:", jax.devices())
+    assert any(d.platform == "gpu" for d in jax.devices()), "No GPU devices found"

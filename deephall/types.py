@@ -21,9 +21,10 @@ from optax import OptState
 
 class WalkerState(NamedTuple):
     electrons: jnp.ndarray
+    electrons_xy: jnp.ndarray
     d_metric: jnp.ndarray
     v: jnp.ndarray
-    psi: jnp.ndarray
+    lnpsi: jnp.ndarray
     local_energy: jnp.ndarray
     weights: jnp.ndarray
     dmc_mean_energy: float

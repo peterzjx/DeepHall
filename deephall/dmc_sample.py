@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import logging
 import signal
 import sys
@@ -54,8 +53,8 @@ def init_guess(key: PRNGKey, batch: int, nelec: int):
         Electron coordinates of shape [batch, nelec, 2]
     """
     key1, key2 = jax.random.split(key)
-    theta = jnp.arccos(jax.random.uniform(key1, (batch, nelec), minval=-1, maxval=1))
-    phi = jax.random.uniform(key2, (batch, nelec), minval=-jnp.pi, maxval=jnp.pi)
+    theta = jnp.arccos(jax.random.uniform(key1, (batch, nelec), minval=-1, maxval=1, dtype=jnp.float64))
+    phi = jax.random.uniform(key2, (batch, nelec), minval=-jnp.pi, maxval=jnp.pi, dtype=jnp.float64)
     return jnp.stack([theta, phi], axis=-1)
 
 
@@ -82,9 +81,10 @@ def initalize_state(cfg: Config, model: nn.Module):
     
     walker_state = WalkerState(
         electrons=coords,
+        electrons_xy=coords,
         d_metric=d_0,
         v=v_0,
-        psi=logpsi_0,
+        lnpsi=logpsi_0,
         local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
         weights=jnp.ones_like(logpsi_0),
         dmc_mean_energy= jnp.zeros_like(logpsi_0)
@@ -104,7 +104,7 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
         )
     else:
         pass
-    pmap_mcmc_step = constants.pmap(mcmc_step, donate_argnums=1)
+    pmap_mcmc_step = constants.pmap(mcmc_step, donate_argnums=(1,))
     pmoves = np.zeros(cfg.mcmc.adapt_frequency)
     return pmap_mcmc_step, pmoves
 
@@ -128,8 +128,9 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
 
         walker_state = WalkerState(
             electrons=walker_state.electrons,
+            electrons_xy=walker_state.electrons_xy,
             v=walker_state.v,
-            psi=walker_state.psi,
+            lnpsi=walker_state.lnpsi,
             local_energy=walker_state.local_energy,
             dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
             weights=walker_state.weights,

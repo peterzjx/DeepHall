@@ -15,10 +15,11 @@ def batch_drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp
     grad_fn = jax.grad(lambda x: model(params, x).real)
     batch_grad_fn = jax.vmap(grad_fn, in_axes=0)
     batch_grad_logpsi = batch_grad_fn(electrons)  # [nwalkers, nelec, 2]
-    inv_Jacob = jnp.array([[-2 * jnp.cos(phi) * jnp.sin(theta / 2)**2, -jnp.sin(phi) * jnp.tan(theta/2)],
+    inv_JT = jnp.array([[-2 * jnp.cos(phi) * jnp.sin(theta / 2)**2, -jnp.sin(phi) * jnp.tan(theta/2)],
                            [-2 * jnp.sin(phi) * jnp.sin(theta / 2)**2,  jnp.cos(phi) * jnp.tan(theta/2)]])
-    inv_Jacob = jnp.transpose(inv_Jacob, [2,3,0,1])
-    drift_vxy = jnp.einsum('ijkl,ijl->ijk', inv_Jacob, batch_grad_logpsi)
+    inv_JT = jnp.transpose(inv_JT, [2,3,0,1])
+    drift_vxy = jnp.einsum('ijkl,ijl->ijk', inv_JT, batch_grad_logpsi)
+    drift_vxy = jnp.clip(drift_vxy, -100, 100)
     return drift_vxy
 
 def batch_log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
@@ -37,4 +38,11 @@ def calculate_d_metric(electrons: jnp.ndarray, _2Q: float=9.0):
     # phi = electrons[..., 1]
     r = 1.0 / (1e-10 + jnp.tan(theta / 2))    
     d_metric = (1 + r**2)**2 / (2.0 * _2Q)
+    return jnp.expand_dims(d_metric, axis=-1)
+
+def calculate_d_metric_xy(electrons_xy: jnp.ndarray, _2Q: float=9.0):
+    x = electrons_xy[..., 0]
+    y = electrons_xy[..., 1]
+    r2 = (x**2 + y**2)    
+    d_metric = (1 + r2)**2 / (2.0 * _2Q)
     return jnp.expand_dims(d_metric, axis=-1)
