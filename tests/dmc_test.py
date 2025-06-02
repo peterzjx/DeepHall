@@ -23,7 +23,7 @@ def simple_config():
     config.seed = 564
     config.system.nspins = (4, 0)
     config.system.flux = 9
-    config.system.tau = 0.1
+    config.system.tau = 0.001
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     config.optim.iterations = 100
@@ -85,22 +85,22 @@ def test_drift_velocity(simple_config: Config, tmp_path: Path, capsys: CaptureFi
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
-            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100)
+            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=200)
             
             print('theta, phi = ', old_walker.electrons[0])
-            print('xy =', old_walker.electrons_xy)
-            print('d-metrix = ', old_walker.d_metric)
+            print('xy =', old_walker.electrons_xy[0])
+            print('d-metrix = ', old_walker.d_metric[0])
             print('velocity = ', old_walker.v[0][0])
             print('Log(psi).real = ',old_walker.lnpsi[0])
             print("theta\', phi\' = ", walker_state.electrons[0])
-            print('xy\' =', walker_state.electrons_xy)
-            print('d-metrix\' = ', walker_state.d_metric)
+            print('xy\' =', walker_state.electrons_xy[0])
+            print('d-metrix\' = ', walker_state.d_metric[0])
             print('velocity\' = ', walker_state.v[0][0])
             print('Log(psi)\'.real = ',walker_state.lnpsi[0])
             print('move = ', move[0])
             print('xy_move = ', xy_move[0])
-            print('accept', acceptance_threhold)
-            print('accept idx', accepted_idx)
+            print('accept', acceptance_threhold[0])
+            print('accept idx', accepted_idx[0])
             # xy = dmc_sample.dmc.thetaphi_xy(old_walker.electrons)
             # dxdy_hist.append(xy)
             # dxdy_hist.append(move)

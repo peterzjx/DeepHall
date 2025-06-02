@@ -95,7 +95,7 @@ def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: j
     log_green_function_forward = log_green_function(electrons_xy, next_electrons_xy, v, d, tau)
     log_green_function_backward = log_green_function(next_electrons_xy, electrons_xy, next_v, next_d, tau)
 
-    acceptance_threshold = jnp.exp(2.0 * (jnp.abs(next_lnpsi) - jnp.abs(lnpsi)))  * jnp.exp(log_green_function_backward - log_green_function_forward)
+    acceptance_threshold = jnp.exp(2.0 * (jnp.real(next_lnpsi) - jnp.real(lnpsi)))  * jnp.exp(log_green_function_backward - log_green_function_forward)
     # acceptance_threshold = jnp.exp(2.0 * (jnp.abs(next_lnpsi) - jnp.abs(lnpsi)))
     walkers_size = acceptance_threshold.shape[0]
     accepted_idx = jax.random.uniform(key, shape=(walkers_size,)) < acceptance_threshold and jnp.linalg.norm(electrons_xy,axis=tuple(range(1, electrons_xy.ndim)))<_Z_MAX*jax.ones(shape=(walkers_size,)) and jnp.linalg.norm(electrons_xy,axis=tuple(range(1, electrons_xy.ndim)))>_Z_MIN*jax.ones(shape=(walkers_size,))
@@ -117,8 +117,9 @@ def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electr
     log_green_function_forward = log_green_function(electrons_xy, next_electrons_xy, v, d, tau)
     log_green_function_backward = log_green_function(next_electrons_xy, electrons_xy, next_v, next_d, tau)
 
-    # acceptance_threshold = jnp.exp(2.0 * (jnp.abs(next_lnpsi) - jnp.abs(lnpsi)))  * jnp.exp(log_green_function_backward - log_green_function_forward)
-    acceptance_threshold = jnp.exp(2.0 * (jnp.abs(next_lnpsi) - jnp.abs(lnpsi)))
+    acceptance_threshold = jnp.exp(2.0 * (jnp.real(next_lnpsi) - jnp.real(lnpsi)))  * jnp.exp(log_green_function_backward - log_green_function_forward)
+    # acceptance_threshold = jnp.exp(2.0 * (jnp.real(next_lnpsi) - jnp.real(lnpsi)))
+    # acceptance_threshold = jnp.abs(jnp.exp(2.0 * ((next_lnpsi) - (lnpsi))))
     # acceptance_threshold = jnp.exp(log_green_function_backward - log_green_function_forward)
     walkers_size = acceptance_threshold.shape[0]
     # accepted_idx = jax.random.uniform(key, shape=(walkers_size,)) < acceptance_threshold
@@ -137,7 +138,7 @@ def calculate_move(key: PRNGKey, v: jnp.ndarray, d_metric: float, tau: float):
             key=key,
             shape=v.shape
         ) * jnp.sqrt(d_metric) * jnp.sqrt(tau)
-        # + v * tau #TODO
+        + v * tau
     )
     move = jnp.clip(move, -100, 100)
     
@@ -188,8 +189,8 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     phi = walker_state.electrons[..., 1]
     
     
-    # xy_move = calculate_move(key_move, walker_state.v, walker_state.d_metric, tau)
-    xy_move = calculate_move_thetaphi(key=key_move, xy=walker_state.electrons_xy)
+    xy_move = calculate_move(key_move, walker_state.v, walker_state.d_metric, tau)
+    # xy_move = calculate_move_thetaphi(key=key_move, xy=walker_state.electrons_xy)
     # inv_J = jnp.array([[-2 * jnp.cos(phi) * jnp.sin(theta / 2)**2, -2 * jnp.sin(phi) * jnp.sin(theta / 2)**2],
     #                        [-jnp.sin(phi) * jnp.tan(theta/2),  jnp.cos(phi) * jnp.tan(theta/2)]])
     # inv_J = jnp.transpose(inv_J, [2,3,0,1])
@@ -202,15 +203,18 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     # ele_xy = thetaphi_xy(walker_state.electrons)
     trail_electrons_xy = walker_state.electrons_xy + xy_move
     trial_electrons = xy_thetaphi(trail_electrons_xy)
+
     
     next_lnpsi = v_utils.batch_log_psi(params, model, trial_electrons)
+    # next_lnpsi = walker_state.lnpsi
     next_v = v_utils.batch_drift_velocity(params, model, trial_electrons)
     # next_d = v_utils.calculate_d_metric(trial_electrons)
     next_d = v_utils.calculate_d_metric_xy(trail_electrons_xy)
 
     # accepted_idx, acceptance_threshold, log_green_function_forward, log_green_function_backward= calculate_acceptance(key_accept, walker_state.electrons,trial_electrons, walker_state.lnpsi, next_lnpsi, walker_state.v, next_v, walker_state.d_metric, next_d, tau)
     accepted_idx, acceptance_threshold, log_green_function_forward, log_green_function_backward= calculate_acceptance_xy(key_accept, walker_state.electrons_xy, trail_electrons_xy, walker_state.lnpsi, next_lnpsi, walker_state.v, next_v, walker_state.d_metric, next_d, tau)
-    # accepted_idx = jnp.ones_like(walker_state.lnpsi)
+    start_step_idx = walker_state.dmc_run_step < 1 
+    accepted_idx = jnp.where(start_step_idx, jnp.ones_like(walker_state.lnpsi, dtype=bool), accepted_idx)
     # acceptance_threshold = jnp.ones_like(walker_state.lnpsi)
     num_accepted += jnp.sum(accepted_idx)
 
@@ -229,7 +233,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     
     # total_mean_energy = walker_state.dmc_mean_energy
 
-    # next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, system.kappa_tau, walker_state.dmc_mean_energy)
+    next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, system.kappa_tau, walker_state.dmc_mean_energy)
     next_walker_weights = walker_state.weights #without reweighting, it is identical to VMC TODO: verify that it resembles VMC
     next_walker_state = WalkerState(
         electrons=next_electrons,
@@ -239,7 +243,8 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
         lnpsi=next_lnpsi,
         local_energy=next_local_energy,
         weights=next_walker_weights,
-        dmc_mean_energy=walker_state.dmc_mean_energy
+        dmc_mean_energy=walker_state.dmc_mean_energy,
+        dmc_run_step=walker_state.dmc_run_step+1
     )
     # print('next dmc_mean E:', next_walker_state.dmc_mean_energy)
     # print(acceptance_threshold)

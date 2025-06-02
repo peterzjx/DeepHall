@@ -62,7 +62,7 @@ def initalize_state(cfg: Config, model: nn.Module):
     key_data, key_params = jax.random.split(jax.random.PRNGKey(cfg.seed))
     coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
     v_0 = jnp.ones_like(coords)
-    logpsi_0 = jnp.ones(coords.shape[:-2])
+    logpsi_0 = jnp.zeros(coords.shape[:-2])
     print('init shape', coords.shape, v_0.shape, logpsi_0.shape)
     print('device #', jax.devices(), jax.device_count())
     
@@ -87,7 +87,8 @@ def initalize_state(cfg: Config, model: nn.Module):
         lnpsi=logpsi_0,
         local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
         weights=jnp.ones_like(logpsi_0),
-        dmc_mean_energy= jnp.zeros_like(logpsi_0)
+        dmc_mean_energy= jnp.zeros_like(logpsi_0),
+        dmc_run_step=jnp.zeros_like(logpsi_0)
     )
 
     # initial_step, (params, walker_state, opt_state)
@@ -134,7 +135,8 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             local_energy=walker_state.local_energy,
             dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
             weights=walker_state.weights,
-            d_metric=walker_state.d_metric
+            d_metric=walker_state.d_metric,
+            dmc_run_step=walker_state.dmc_run_step
         )
         # TODO: check if jnp.mean(walker_state.dmc_mean_energy) and weighted_energy are the same
         print('zzzz', f'{weighted_energy:.12f}', f'{jnp.mean(walker_state.dmc_mean_energy):.12f}', f'{jnp.mean(walker_state.weights):.12f}')

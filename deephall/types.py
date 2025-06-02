@@ -28,6 +28,7 @@ class WalkerState(NamedTuple):
     local_energy: jnp.ndarray
     weights: jnp.ndarray
     dmc_mean_energy: float
+    dmc_run_step: int
 
 class AngularMomenta(TypedDict):
     """Angular momenta is calculated with kinetic energy."""
