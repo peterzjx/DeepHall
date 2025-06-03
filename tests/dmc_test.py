@@ -19,7 +19,7 @@ from pytest import CaptureFixture
 
 @pytest.fixture
 def simple_config():
-    config = Config(network=Network(type=NetworkType.laughlin))
+    config = Config(network=Network(type=NetworkType.psiformer))
     config.seed = 564
     config.system.nspins = (4, 0)
     config.system.flux = 9
@@ -30,8 +30,8 @@ def simple_config():
     config.batch_size = 6
     config.mcmc.width = 0.3
     
-    config.log.pretrained_path = "../logs/laughlin4kappa1.0/ckpt_000999.npz"
-    config.log.save_path = "../logs/laughlin4kappa1.0_pytest"
+    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_000556.npz"
+    config.log.save_path = "../logs/psiformer_4_kappa_1.0"
     config.mcmc.use_dmc = True
     config.mcmc.burn_in = 2001
     return config

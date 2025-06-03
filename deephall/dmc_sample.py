@@ -121,12 +121,16 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
 #         local_energy=energy,
 #         weights=walker_state.weights
 #     )
-def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int):
-    if step % update_interval == 0:
-        weighted_energy = jnp.sum(walker_state.weights * walker_state.local_energy) / jnp.sum(walker_state.weights)
-        print('step', step, 'xxxxx', weighted_energy, jnp.mean(walker_state.dmc_mean_energy), jnp.mean(walker_state.weights ))
-        # walker_state = walker_state._replace(dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy)
+def weighted_mean_energy(walker_state: WalkerState):
+    weighted_energy = jnp.sum(walker_state.weights * walker_state.local_energy) / jnp.sum(walker_state.weights)
+    return weighted_energy
 
+def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, use_external_energy: bool=False, external_energy: float=0.0):
+    if step % update_interval == 0:
+        if use_external_energy:
+            weighted_energy = external_energy
+        else:
+            weighted_energy = weighted_mean_energy(walker_state)
         walker_state = WalkerState(
             electrons=walker_state.electrons,
             electrons_xy=walker_state.electrons_xy,
@@ -138,10 +142,21 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             d_metric=walker_state.d_metric,
             dmc_run_step=walker_state.dmc_run_step
         )
-        # TODO: check if jnp.mean(walker_state.dmc_mean_energy) and weighted_energy are the same
-        print('zzzz', f'{weighted_energy:.12f}', f'{jnp.mean(walker_state.dmc_mean_energy):.12f}', f'{jnp.mean(walker_state.weights):.12f}')
     return walker_state
-
+def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
+    new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
+    if energy_hist == None:
+        energy_hist = new_hist
+    else:
+        energy_hist = jnp.concatenate([energy_hist, new_hist], axis=0)
+        if energy_hist.shape[0]>max_length:
+            new_len = new_hist.shape[0]
+            energy_hist = energy_hist[new_len:]
+    weights = energy_hist[..., 0]
+    energies = energy_hist[..., 1]
+    mean_energy = jnp.sum(weights * energies) / jnp.sum(weights)
+    return energy_hist, mean_energy
+        
 def sample_test(cfg: Config):
     init_logging()
     log_manager = LogManager(cfg)
