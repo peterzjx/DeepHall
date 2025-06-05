@@ -28,7 +28,7 @@ from deephall import constants
 from deephall.config import OptimizerKfac
 from deephall.log import CheckpointState
 from deephall.loss import LossStats
-from deephall.types import TrainingInit, TrainingStep
+from deephall.types import TrainingInit, TrainingStep, DMCCheckpointState
 
 repeated_dense_tag = kfac_jax.LayerTag("repeated_dense", num_inputs=1, num_outputs=1)
 
@@ -235,6 +235,54 @@ def make_kfac_training_step(
         )
         return (
             CheckpointState(params, data, opt_state, mcmc_width),
+            cast(LossStats, stats["aux"]),
+        )
+
+    return init, step
+
+def make_kfac_training_dmc_step(
+    optim_cfg: OptimizerKfac, loss_grad_fn
+) -> tuple[TrainingInit, TrainingStep]:
+    def val_and_grad(params, data):
+        stats, grads = loss_grad_fn(params, data)
+        return (stats["energy"], stats), grads
+
+    optimizer = kfac_jax.Optimizer(
+        val_and_grad,
+        l2_reg=0.0,
+        norm_constraint=1e-3,
+        value_func_has_aux=True,
+        learning_rate_schedule=optim_cfg.lr.schedule,
+        curvature_ema=0.95,
+        inverse_update_period=1,
+        min_damping=1e-4,
+        num_burnin_steps=0,
+        register_only_generic=False,
+        estimation_mode="fisher_exact",
+        multi_device=True,
+        pmap_axis_name=constants.PMAP_AXIS_NAME,
+        auto_register_kwargs=dict(
+            graph_patterns=GRAPH_PATTERNS,
+        ),
+    )
+    shared_mom = kfac_jax.utils.replicate_all_local_devices(jnp.zeros([]))
+    shared_damping = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(1e-3))
+
+    def init(params, key, dmc_state: DMCCheckpointState):
+        return optimizer.init(params, key, dmc_state)
+
+    def step(dmc_state: DMCCheckpointState, key: PRNGKey):
+        params, walker_state, opt_state = dmc_state
+        params, opt_state, *_, stats = optimizer.step(
+            params=params,
+            state=opt_state,
+            rng=key,
+            batch=walker_state.electrons,
+            momentum=shared_mom,
+            damping=shared_damping,
+        )
+        return (
+            DMCCheckpointState(params, walker_state, opt_state),
             cast(LossStats, stats["aux"]),
         )
 

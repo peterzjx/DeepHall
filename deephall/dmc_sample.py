@@ -53,8 +53,8 @@ def init_guess(key: PRNGKey, batch: int, nelec: int):
         Electron coordinates of shape [batch, nelec, 2]
     """
     key1, key2 = jax.random.split(key)
-    theta = jnp.arccos(jax.random.uniform(key1, (batch, nelec), minval=-1, maxval=1, dtype=jnp.float64))
-    phi = jax.random.uniform(key2, (batch, nelec), minval=-jnp.pi, maxval=jnp.pi, dtype=jnp.float64)
+    theta = jnp.arccos(jax.random.uniform(key1, (batch, nelec), minval=-1, maxval=1))
+    phi = jax.random.uniform(key2, (batch, nelec), minval=-jnp.pi, maxval=jnp.pi)
     return jnp.stack([theta, phi], axis=-1)
 
 

@@ -18,7 +18,7 @@ from deephall.loss import make_loss_fn
 from deephall.types import LogPsiNetwork, TrainingInit, TrainingStep
 
 from .adam import make_adam_training_step
-from .kfac import make_kfac_training_step
+from .kfac import make_kfac_training_step, make_kfac_training_dmc_step
 from .none import make_inference_step
 
 
@@ -33,3 +33,10 @@ def make_optimizer_step(
     if cfg.optim.optimizer == OptimizerName.none:
         return make_inference_step(loss_grad_fn)
     raise ValueError(f"Optimizer {cfg.optim.optimizer} is not implemented!")
+
+def make_optimizer_dmc_step(
+    cfg: Config, network: LogPsiNetwork
+) -> tuple[TrainingInit, TrainingStep]:
+    loss_grad_fn = make_loss_fn(network, cfg.system)
+    assert cfg.optim.optimizer == OptimizerName.kfac
+    return make_kfac_training_dmc_step(cfg.optim.kfac, loss_grad_fn)

@@ -31,7 +31,7 @@ for file_name in sys.argv[1:]:
     y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
     y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
-    plt.plot(x0, y1, '.')
+    plt.plot(x0, y1, '.-')
     plt.plot(x0, y2, '--')
     plt.plot(x0, y0_smoothed, 'o-', label=file_name,  color='red')
     plt.legend()

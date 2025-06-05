@@ -176,7 +176,6 @@ def train(cfg: Config):
             if killer.kill_now or jnp.isnan(stats["energy"].real).any():
                 raise SystemExit("=" * 30 + " ABORT " + "=" * 30)
 
-
 class GracefulKiller:
     """Capture SIGINT and SIGTERM so that we can save checkpoints before exit."""
 
