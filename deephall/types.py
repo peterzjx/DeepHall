@@ -27,7 +27,7 @@ class WalkerState(NamedTuple):
     lnpsi: jnp.ndarray
     local_energy: jnp.ndarray
     weights: jnp.ndarray
-    dmc_mean_energy: float
+    dmc_mean_energy: jnp.ndarray
     dmc_run_step: int
 
 class AngularMomenta(TypedDict):

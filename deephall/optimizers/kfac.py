@@ -268,11 +268,12 @@ def make_kfac_training_dmc_step(
     shared_mom = kfac_jax.utils.replicate_all_local_devices(jnp.zeros([]))
     shared_damping = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(1e-3))
 
-    def init(params, key, dmc_state: DMCCheckpointState):
-        return optimizer.init(params, key, dmc_state)
+    def init(params, key, electrons: jnp.ndarray):
+        return optimizer.init(params, key, electrons)
 
     def step(dmc_state: DMCCheckpointState, key: PRNGKey):
         params, walker_state, opt_state = dmc_state
+        print(f"walker_state shape: {walker_state.electrons.shape}")
         params, opt_state, *_, stats = optimizer.step(
             params=params,
             state=opt_state,
@@ -283,7 +284,8 @@ def make_kfac_training_dmc_step(
         )
         return (
             DMCCheckpointState(params, walker_state, opt_state),
-            cast(LossStats, stats["aux"]),
+            # cast(LossStats, stats["aux"]),
+            None
         )
 
     return init, step

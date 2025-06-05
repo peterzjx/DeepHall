@@ -250,6 +250,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     )
     # print('next dmc_mean E:', next_walker_state.dmc_mean_energy)
     # print(acceptance_threshold)
+    # TODO: wrap the output into a debug_info object
     return next_walker_state, key, num_accepted, acceptance_threshold, accepted_idx, walker_state, xy_move, move, log_green_function_forward, log_green_function_backward
 
 

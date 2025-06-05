@@ -36,11 +36,11 @@ if __name__=="__main__":
 
     # config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_009978.npz"
     # config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
-    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_000519.npz"
+    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_003242.npz"
     config.log.save_path = "../logs/psiformer_4_kappa_1.0_dmc"
     # config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
     # config.log.save_path = "../logs/laughlin_4_kappa_1.0_dmc"
     config.mcmc.use_dmc = True
-    config.mcmc.burn_in = 500
+    config.mcmc.burn_in = 20
 
     dmc_train.dmc_train(config)
