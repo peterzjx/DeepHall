@@ -1,0 +1,46 @@
+import jax
+import jax.numpy as jnp
+
+jax.config.update('jax_enable_x64', True)
+import numpy as np
+from deephall import dmc_sample, Config
+from deephall.dmc import dmc_train
+from deephall.config import Network, NetworkType, System, PsiformerNetwork,Network, NetworkType, FluxType, FermionicType, PartonNetwork
+from pathlib import Path
+from deephall.types import LogPsiNetwork
+import jax
+import jax.numpy as jnp
+import kfac_jax
+from omegaconf import OmegaConf
+import logging
+import jax.numpy as jnp
+
+
+if __name__=="__main__":
+    config = Config(network=Network(
+            type=NetworkType.psiformer,
+            # parton=PartonNetwork(
+            #     fermionic_type=FermionicType.pfaffian,
+            #     flux_type=FluxType.symmetric_mlp_network
+            # )
+        ))
+    config.seed = 564
+    config.system.nspins = (4, 0)
+    config.system.flux = 9
+    config.system.tau = 0.001
+    config.system.interaction_strength = 1.0
+    config.system.kappa_tau = config.system.tau * config.system.interaction_strength
+    config.optim.iterations = 3000
+    config.batch_size = 6
+    config.mcmc.width = 0.3
+
+    # config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_009978.npz"
+    # config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
+    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_000519.npz"
+    config.log.save_path = "../logs/psiformer_4_kappa_1.0_dmc"
+    # config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
+    # config.log.save_path = "../logs/laughlin_4_kappa_1.0_dmc"
+    config.mcmc.use_dmc = True
+    config.mcmc.burn_in = 500
+
+    dmc_train.dmc_train(config)
