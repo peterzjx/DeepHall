@@ -131,17 +131,17 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
-        walker_state = WalkerState(
-            electrons=walker_state.electrons,
-            electrons_xy=walker_state.electrons_xy,
-            v=walker_state.v,
-            lnpsi=walker_state.lnpsi,
-            local_energy=walker_state.local_energy,
-            dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
-            weights=walker_state.weights,
-            d_metric=walker_state.d_metric,
-            dmc_run_step=walker_state.dmc_run_step
-        )
+        # walker_state = WalkerState(
+        #     electrons=walker_state.electrons,
+        #     electrons_xy=walker_state.electrons_xy,
+        #     v=walker_state.v,
+        #     lnpsi=walker_state.lnpsi,
+        #     local_energy=walker_state.local_energy,
+        #     dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
+        #     weights=walker_state.weights,
+        #     d_metric=walker_state.d_metric,
+        #     dmc_run_step=walker_state.dmc_run_step
+        # )
     return walker_state
 def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
     new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)

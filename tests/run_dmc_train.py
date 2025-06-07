@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 
-jax.config.update('jax_enable_x64', True)
 import numpy as np
 from deephall import dmc_sample, Config
 from deephall.dmc import dmc_train
@@ -14,15 +13,16 @@ import kfac_jax
 from omegaconf import OmegaConf
 import logging
 import jax.numpy as jnp
+from deephall.train import train
 
 
 if __name__=="__main__":
     config = Config(network=Network(
-            type=NetworkType.psiformer,
-            # parton=PartonNetwork(
-            #     fermionic_type=FermionicType.pfaffian,
-            #     flux_type=FluxType.symmetric_mlp_network
-            # )
+            type=NetworkType.parton,
+            parton=PartonNetwork(
+                fermionic_type=FermionicType.pfaffian,
+                flux_type=FluxType.symmetric_mlp_network
+            )
         ))
     config.seed = 564
     config.system.nspins = (4, 0)
@@ -36,8 +36,8 @@ if __name__=="__main__":
 
     # config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_009978.npz"
     # config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
-    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_003242.npz"
-    config.log.save_path = "../logs/psiformer_4_kappa_1.0_dmc"
+    # config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_003242.npz"
+    config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
     # config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
     # config.log.save_path = "../logs/laughlin_4_kappa_1.0_dmc"
     config.mcmc.use_dmc = True

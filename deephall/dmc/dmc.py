@@ -237,21 +237,32 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
 
     next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, system.kappa_tau, walker_state.dmc_mean_energy)
     # next_walker_weights = walker_state.weights #without reweighting, it is identical to VMC TODO: verify that it resembles VMC
-    next_walker_state = WalkerState(
-        electrons=next_electrons,
-        electrons_xy=next_electrons_xy,
-        v=next_v,
-        d_metric=next_d,
-        lnpsi=next_lnpsi,
-        local_energy=next_local_energy,
-        weights=next_walker_weights,
-        dmc_mean_energy=walker_state.dmc_mean_energy,
-        dmc_run_step=walker_state.dmc_run_step+1
-    )
+    # next_walker_state = WalkerState(
+    #     electrons=next_electrons,
+    #     electrons_xy=next_electrons_xy,
+    #     v=next_v,
+    #     d_metric=next_d,
+    #     lnpsi=next_lnpsi,
+    #     local_energy=next_local_energy,
+    #     weights=next_walker_weights,
+    #     dmc_mean_energy=walker_state.dmc_mean_energy,
+    #     dmc_run_step=walker_state.dmc_run_step+1
+    # )
+
+    # walker_state.electrons = next_electrons
+    # walker_state.electrons_xy = next_electrons_xy
+    # walker_state.v = next_v
+    # walker_state.d_metric = next_d
+    # walker_state.lnpsi = next_lnpsi
+    # walker_state.local_energy = next_local_energy
+    # walker_state.weights = next_walker_weights
+    # walker_state.dmc_mean_energy = walker_state.dmc_mean_energy
+    # walker_state.dmc_run_step = walker_state.dmc_run_step + 1
+
     # print('next dmc_mean E:', next_walker_state.dmc_mean_energy)
     # print(acceptance_threshold)
     # TODO: wrap the output into a debug_info object
-    return next_walker_state, key, num_accepted, acceptance_threshold, accepted_idx, walker_state, xy_move, move, log_green_function_forward, log_green_function_backward
+    return walker_state, key, num_accepted, acceptance_threshold, accepted_idx, walker_state, xy_move, move, log_green_function_forward, log_green_function_backward
 
 
 def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
@@ -259,6 +270,7 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
     def dmc_step(
         params: ArrayTree, init_walker_state: WalkerState, key: PRNGKey,
     ):
+        return init_walker_state, None, None, None, None, None, None, None, None
         """Performs a set of DMC steps.
 
         Args:

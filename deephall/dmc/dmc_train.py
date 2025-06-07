@@ -35,6 +35,7 @@ from deephall.networks import make_network
 from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState
 from deephall.dmc import dmc
 from deephall import dmc_sample
+from deephall.train import initalize_state
 
 logger = logging.getLogger("deephall")
 
@@ -43,11 +44,11 @@ def dmc_train(cfg: Config):
     init_logging()
     log_manager = LogManager(cfg)
     ## Model loading
-    model = dmc_sample.make_network(cfg.system, cfg.network)
-    network = dmc_sample.cast(LogPsiNetwork, model.apply)
+    model = make_network(cfg.system, cfg.network)
+    network = cast(LogPsiNetwork, model.apply)
     pmap_mcmc_step, pmove = dmc_sample.setup_mcmc(cfg, network)
     print('initial setup_mcmc done', pmap_mcmc_step)
-    assert cfg.log.pretrained_path is not None
+    # assert cfg.log.pretrained_path is not None
     initial_step, (params, walker_state, opt_state) = (
         dmc_sample.initalize_state(cfg, model)
     )
@@ -56,9 +57,6 @@ def dmc_train(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
 
-    # model = make_network(cfg.system, cfg.network)
-    # network = cast(LogPsiNetwork, model.apply)
-    # pmap_mcmc_step, pmoves = setup_mcmc(cfg, network)
     opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
 
     key = jax.random.PRNGKey(cfg.seed)
@@ -107,7 +105,6 @@ def dmc_train(cfg: Config):
         #     )(params, data)
         #     logger.info("Initial energy: %s", initial_stats["energy"][0].real)
 
-    # state = CheckpointState(params, data, opt_state, mcmc_width)
     dmc_state = DMCCheckpointState(params, walker_state, opt_state)
 
     last_save_time = time.time()
@@ -130,22 +127,25 @@ def dmc_train(cfg: Config):
 
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(params, walker_state, subkey)
-            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
+            # energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
+            # walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
 
+            dmc_state = dmc_state._replace(walker_state=walker_state)
+            print('training step ++')
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             dmc_state, stats = dmc_training_step(dmc_state, subkey)
+            print('after dmc training step ++')
             writer.log(
-                step=str(step),
-                pmove=f"{pmove[0]:.2f}",
-                energy=f"{stats['energy'].real[0]:.4f}",
-                energy_imag=f"{stats['energy'].imag[0]:+.4f}",
-                potential=f"{stats['potential'][0]:.4f}",
-                kinetic=f"{stats['kinetic'].real[0]:.4f}",
-                variance=f"{stats['variance'][0]:.4f}",
-                Lz=f"{stats['angular_momentum_z'][0]:+.4f}",
-                Lz_square=f"{stats['angular_momentum_z_square'][0]:.4f}",
-                L_square=f"{stats['angular_momentum_square'][0]:.4f}",
+                # step=str(step),
+                # pmove=f"{pmove[0]:.2f}",
+                # energy=f"{stats['energy'].real[0]:.4f}",
+                # energy_imag=f"{stats['energy'].imag[0]:+.4f}",
+                # potential=f"{stats['potential'][0]:.4f}",
+                # kinetic=f"{stats['kinetic'].real[0]:.4f}",
+                # variance=f"{stats['variance'][0]:.4f}",
+                # Lz=f"{stats['angular_momentum_z'][0]:+.4f}",
+                # Lz_square=f"{stats['angular_momentum_z_square'][0]:.4f}",
+                # L_square=f"{stats['angular_momentum_square'][0]:.4f}",
             )
             current_time = time.time()
             if (
@@ -159,7 +159,7 @@ def dmc_train(cfg: Config):
             ):
                 last_save_time = current_time
                 writer.force_flush()
-                log_manager.save_checkpoint(step, state)
+                # log_manager.save_checkpoint(step, state)
             if killer.kill_now or jnp.isnan(stats["energy"].real).any():
                 raise SystemExit("=" * 30 + " ABORT " + "=" * 30)
 

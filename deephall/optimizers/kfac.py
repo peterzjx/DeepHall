@@ -274,6 +274,7 @@ def make_kfac_training_dmc_step(
     def step(dmc_state: DMCCheckpointState, key: PRNGKey):
         params, walker_state, opt_state = dmc_state
         print(f"walker_state shape: {walker_state.electrons.shape}")
+        
         params, opt_state, *_, stats = optimizer.step(
             params=params,
             state=opt_state,
@@ -284,8 +285,7 @@ def make_kfac_training_dmc_step(
         )
         return (
             DMCCheckpointState(params, walker_state, opt_state),
-            # cast(LossStats, stats["aux"]),
-            None
+            cast(LossStats, stats["aux"]),
         )
 
     return init, step
