@@ -223,20 +223,36 @@ def make_kfac_training_step(
     def init(params, key, data):
         return optimizer.init(params, key, data)
 
-    def step(state: CheckpointState, key: PRNGKey):
-        params, data, opt_state, mcmc_width = state
+    def step(state: DMCCheckpointState, key: PRNGKey):
+        params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         params, opt_state, *_, stats = optimizer.step(
             params=params,
             state=opt_state,
             rng=key,
-            batch=data,
+            batch=electrons,
             momentum=shared_mom,
             damping=shared_damping,
         )
         return (
-            CheckpointState(params, data, opt_state, mcmc_width),
+            DMCCheckpointState(params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             cast(LossStats, stats["aux"]),
         )
+    
+
+    # def step(state: CheckpointState, key: PRNGKey):
+    #     params, data, opt_state, mcmc_width = state
+    #     params, opt_state, *_, stats = optimizer.step(
+    #         params=params,
+    #         state=opt_state,
+    #         rng=key,
+    #         batch=data,
+    #         momentum=shared_mom,
+    #         damping=shared_damping,
+    #     )
+    #     return (
+    #         CheckpointState(params, data, opt_state, mcmc_width),
+    #         cast(LossStats, stats["aux"]),
+    #     )
 
     return init, step
 

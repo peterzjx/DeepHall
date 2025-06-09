@@ -270,7 +270,7 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
     def dmc_step(
         params: ArrayTree, init_walker_state: WalkerState, key: PRNGKey,
     ):
-        return init_walker_state, None, None, None, None, None, None, None, None
+        # return init_walker_state, None, None, None, None, None, None, None, None
         """Performs a set of DMC steps.
 
         Args:

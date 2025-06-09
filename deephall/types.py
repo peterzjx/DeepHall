@@ -20,15 +20,15 @@ from optax import OptState
 # from deephall.dmc.dmc import WalkerState
 
 class WalkerState(NamedTuple):
-    electrons: jnp.ndarray
-    electrons_xy: jnp.ndarray
-    d_metric: jnp.ndarray
-    v: jnp.ndarray
-    lnpsi: jnp.ndarray
-    local_energy: jnp.ndarray
-    weights: jnp.ndarray
-    dmc_mean_energy: jnp.ndarray
-    dmc_run_step: int
+    electrons: jnp.ndarray = jnp.array([])
+    electrons_xy: jnp.ndarray = jnp.array([])
+    d_metric: jnp.ndarray = jnp.array([])
+    v: jnp.ndarray = jnp.array([])
+    lnpsi: jnp.ndarray = jnp.array([])
+    local_energy: jnp.ndarray = jnp.array([])
+    weights: jnp.ndarray = jnp.array([])
+    dmc_mean_energy: jnp.ndarray = jnp.array([])
+    dmc_run_step: int = 0
 
 class AngularMomenta(TypedDict):
     """Angular momenta is calculated with kinetic energy."""
@@ -59,9 +59,37 @@ class CheckpointState(NamedTuple):
 
 class DMCCheckpointState(NamedTuple):
     params: ArrayTree
-    walker_state: WalkerState
+    electrons: jnp.ndarray
+    electrons_xy: jnp.ndarray
+    d_metric: jnp.ndarray
+    v: jnp.ndarray
+    lnpsi: jnp.ndarray
+    local_energy: jnp.ndarray
+    weights: jnp.ndarray
+    dmc_mean_energy: jnp.ndarray
+    dmc_run_step: int
     opt_state: OptState
 
+# kfac optimizer checkpoint state must have all its members be jnp.ndarray with the first two
+# dimensions being the number of devices and batch size. That means structures like WalkerState
+# cannot be used as is and must be flattened into direct attributes of the DMCCheckpointState.
+def get_walker_state(state: DMCCheckpointState) -> WalkerState:
+    updates = {}
+    for attribute in state._fields:
+        if attribute not in ['opt_state', 'params']:
+            updates[attribute] = getattr(state, attribute)
+    walker_state = WalkerState(**updates)
+    return walker_state
+
+def update_from_walker_state(state: DMCCheckpointState, walker_state: WalkerState) -> DMCCheckpointState:
+    updates = {
+        'params': state.params,
+        'opt_state': state.opt_state,
+    }
+    for attribute in state._fields:
+        if attribute not in ['opt_state', 'params']:
+            updates[attribute] = getattr(walker_state, attribute)
+    return DMCCheckpointState(**updates)
 
 class LocalEnergy(Protocol):
     def __call__(

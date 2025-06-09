@@ -29,7 +29,8 @@ from omegaconf import OmegaConf
 
 from deephall import constants, mcmc, optimizers
 from deephall.config import Config, OptimizerName
-from deephall.log import CheckpointState, LogManager, init_logging
+from deephall.log import LogManager, init_logging
+from deephall.types import CheckpointState, DMCCheckpointState, WalkerState
 from deephall.loss import LossMode, make_loss_fn
 from deephall.networks import make_network
 from deephall.types import LogPsiNetwork
@@ -63,7 +64,13 @@ def initalize_state(cfg: Config, model: nn.Module):
         model.init(key_params, data[0, 0])
     )
     mcmc_width = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(cfg.mcmc.width))
-    return 0, CheckpointState(params, data, None, mcmc_width)
+    # return 0, CheckpointState(params, data, None, mcmc_width)
+
+
+    walker_state = WalkerState(
+        electrons=data,
+    )
+    return 0, DMCCheckpointState(params, walker_state, None)
 
 
 def setup_mcmc(cfg: Config, network: LogPsiNetwork):

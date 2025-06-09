@@ -32,7 +32,7 @@ from deephall.config import Config, OptimizerName
 from deephall.log import LogManager, init_logging
 from deephall.loss import LossMode, make_loss_fn
 from deephall.networks import make_network
-from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState
+from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
 from deephall.dmc import dmc
 from deephall import dmc_sample
 from deephall.train import initalize_state
@@ -49,18 +49,16 @@ def dmc_train(cfg: Config):
     pmap_mcmc_step, pmove = dmc_sample.setup_mcmc(cfg, network)
     print('initial setup_mcmc done', pmap_mcmc_step)
     # assert cfg.log.pretrained_path is not None
-    initial_step, (params, walker_state, opt_state) = (
+    initial_step, state = (
         dmc_sample.initalize_state(cfg, model)
     )
+    walker_state = get_walker_state(state)
     print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
-    energy_history = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
+    energy_history = jnp.stack([state.weights, state.local_energy], axis= -1)
 
-    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
-
-    key = jax.random.PRNGKey(cfg.seed)
-    sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
+    opt_init, dmc_training_step = optimizers.make_optimizer_step(cfg, network)
 
     # if cfg.log.pretrained_path is not None:
     #     initial_step, (params, data, opt_state, mcmc_width) = (
@@ -81,11 +79,12 @@ def dmc_train(cfg: Config):
     ):  # Reset steps because inference run is another run
         initial_step = 0
 
-    if opt_state is None:
+    if state.opt_state is None:
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-        opt_state = opt_init(params, subkey, walker_state.electrons)
+        state = state._replace(opt_state=opt_init(state.params, subkey, walker_state.electrons))
 
     logger.info("Start DMC with %s JAX devices", jax.device_count())
+
 
     if initial_step == 0:
         for step in range(cfg.mcmc.burn_in):
@@ -93,9 +92,10 @@ def dmc_train(cfg: Config):
             # data, pmove = pmap_mcmc_step(params, data, subkey, mcmc_width)
 
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(params, walker_state, subkey)
-            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
+            # data, pmove= pmap_mcmc_step(params, data, subkey)
+            walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(state.params, walker_state, subkey)
+            # energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
+            # walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
         logger.info("Burn in DMC complete")
         # if cfg.log.initial_energy:
         #     # Logging inital energy is helpful for debugging. If we have initial energy
@@ -105,7 +105,7 @@ def dmc_train(cfg: Config):
         #     )(params, data)
         #     logger.info("Initial energy: %s", initial_stats["energy"][0].real)
 
-    dmc_state = DMCCheckpointState(params, walker_state, opt_state)
+    state = update_from_walker_state(state, walker_state)
 
     last_save_time = time.time()
     killer = GracefulKiller()
@@ -126,14 +126,17 @@ def dmc_train(cfg: Config):
             # state = state._replace(data=new_data, mcmc_width=new_mcmc_width)
 
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(params, walker_state, subkey)
+            walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(state.params, walker_state, subkey)
+            # new_data, pmove  = pmap_mcmc_step(state.params, state.data, subkey, mcmc_width)
+            state = update_from_walker_state(state, walker_state)
+
             # energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
             # walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
 
-            dmc_state = dmc_state._replace(walker_state=walker_state)
+            # dmc_state = dmc_state._replace(walker_state=walker_state)
             print('training step ++')
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            dmc_state, stats = dmc_training_step(dmc_state, subkey)
+            state, stats = dmc_training_step(state, subkey)
             print('after dmc training step ++')
             writer.log(
                 # step=str(step),

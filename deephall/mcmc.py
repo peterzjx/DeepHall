@@ -121,7 +121,7 @@ def make_mcmc_step(
 
     @jax.jit
     def mcmc_step(
-        params: ArrayTree, data: jnp.ndarray, key: PRNGKey, width: jnp.ndarray
+        params: ArrayTree, data: jnp.ndarray, key: PRNGKey, width: jnp.ndarray = 0.3
     ):
         """Performs a set of MCMC steps.
 
