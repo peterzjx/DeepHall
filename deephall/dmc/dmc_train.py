@@ -112,19 +112,6 @@ def dmc_train(cfg: Config):
     with log_manager.create_writer() as writer:
         writer.hide("kinetic", "potential", "Lz_square")
         for step in range(initial_step, cfg.optim.iterations):
-            # sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            # new_data, pmove = pmap_mcmc_step(
-            #     state.params, state.data, subkey, state.mcmc_width
-            # )
-            # new_mcmc_width, pmoves = mcmc.update_mcmc_width(
-            #     step - initial_step,
-            #     state.mcmc_width,
-            #     cfg.mcmc.adapt_frequency,
-            #     pmove,
-            #     pmoves,
-            # )
-            # state = state._replace(data=new_data, mcmc_width=new_mcmc_width)
-
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(state.params, walker_state, subkey)
             # new_data, pmove  = pmap_mcmc_step(state.params, state.data, subkey, mcmc_width)

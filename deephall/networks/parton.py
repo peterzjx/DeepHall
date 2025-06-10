@@ -148,6 +148,10 @@ class Parton(nn.Module):
             self.symmetric_network = SymmetricAttNetwork()
 
     def _get_fermionic_part_pfaffian(self, electrons):
+        """
+            electrons: [nelec, 2]
+        """
+        assert electrons.ndim == 2, 'electrons must be 2D'
         Ne = electrons.shape[0]
         electron_pair, upper_i, upper_j = extract_pairs(electron=electrons)
         theta, phi = electron_pair[..., 0], electron_pair[..., 1]
@@ -191,7 +195,6 @@ class Parton(nn.Module):
         bosonic_part = self.flux_attachment(electrons, mask_len=self.mask_len, truncate=True)
         return jnp.log(fermionic_part * bosonic_part)
 
-    @nn.compact
     def get_rhoij(self, electrons):
         theta, phi = electrons[..., 0], electrons[..., 1]
 
@@ -202,7 +205,6 @@ class Parton(nn.Module):
         rho = jnp.abs(element)
         return rho
 
-    @nn.compact
     def cusp_matrix(self, electrons, mask_len=0.1):
         theta, phi = electrons[..., 0], electrons[..., 1]
 
@@ -226,7 +228,6 @@ class Parton(nn.Module):
             raise ValueError(f"Invalid flux type: {self.flux_type}")
 
 
-    @nn.compact
     def flux_product(self, electrons, mask_len=0.1, truncate=False):
         """
             electrons: [..., N, 2]

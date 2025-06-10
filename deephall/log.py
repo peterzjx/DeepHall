@@ -78,6 +78,14 @@ def init_logging():
     logger.handlers.clear()
     handler = logging.StreamHandler(sys.stderr)
     handler.setLevel(logging.INFO)
+    
+    # Create a formatter that includes timestamp, filename, line number and message
+    formatter = logging.Formatter(
+        fmt='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    
     logger.addHandler(handler)
     # Avoid pollution from absl
     logger.propagate = False

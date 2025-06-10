@@ -23,11 +23,17 @@ def batch_drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp
     return drift_vxy
 
 def batch_log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):
+    """
+        electrons: [nwalkers, nelec, 2]
+    """
     batch_model = jax.vmap(model, in_axes=(None, 0))
     logpsi = batch_model(params, electrons).real
     return logpsi
 
 def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, electrons: jnp.ndarray):
+    """
+        electrons: [nwalkers, nelec, 2]
+    """
     # hamiltonian.local_energy takes non-batched electrons
     local_energy_fn = hamiltonian.local_energy(model, system)
     batch_local_energy = jax.vmap(local_energy_fn, in_axes=(None, 0))

@@ -92,15 +92,16 @@ def initalize_state(cfg: Config, model: nn.Module):
 
 
 def setup_mcmc(cfg: Config, network: LogPsiNetwork):
-    batch_network = jax.vmap(network, in_axes=(None, 0))
     if cfg.mcmc.use_dmc:
+        # NOTE: we will takek batch_grad_fn inside, so we only need to pass the non-batched network
         mcmc_step = dmc.make_dmc_step(
             cfg.system,
-            batch_network,
+            network,
             batch_per_device=cfg.batch_size // jax.device_count(),
             steps=cfg.mcmc.steps
         )
     else:
+        batch_network = jax.vmap(network, in_axes=(None, 0))
         mcmc_step = mcmc.make_mcmc_step(
             batch_network,
             batch_per_device=cfg.batch_size // jax.device_count(),
