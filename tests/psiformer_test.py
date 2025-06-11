@@ -19,7 +19,7 @@ for Ne in [4]:
         config.system.nspins = (Ne, 0)
         config.system.flux = 2*Ne+1
         config.optim.iterations  = 13000
-        config.batch_size = 192
+        config.batch_size = 6
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"

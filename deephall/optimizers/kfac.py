@@ -223,7 +223,7 @@ def make_kfac_training_step(
     def init(params, key, data):
         return optimizer.init(params, key, data)
 
-    def step(state: DMCCheckpointState, key: PRNGKey):
+    def step(state: DMCCheckpointState, key: PRNGKey): #DMC version
         params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         params, opt_state, *_, stats = optimizer.step(
             params=params,
@@ -239,7 +239,7 @@ def make_kfac_training_step(
         )
     
 
-    # def step(state: CheckpointState, key: PRNGKey):
+    # def step(state: CheckpointState, key: PRNGKey): #original VMC version
     #     params, data, opt_state, mcmc_width = state
     #     params, opt_state, *_, stats = optimizer.step(
     #         params=params,

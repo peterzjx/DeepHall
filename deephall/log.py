@@ -31,7 +31,7 @@ from omegaconf import OmegaConf
 from upath import UPath
 
 from deephall.config import Config
-from deephall.types import CheckpointState
+from deephall.types import CheckpointState,DMCCheckpointState
 
 logger = logging.getLogger("deephall")
 
@@ -54,7 +54,14 @@ def deduplicate(self: CheckpointState):
         np.asarray(dedup_pytree(self.opt_state), dtype="object"),
         self.mcmc_width[0],
     )
-
+def dmc_deduplicate(self: DMCCheckpointState):
+    assert self.electrons.ndim == 4, "data has wrong shape to deduplicate"
+    return CheckpointState(
+        dedup_pytree(self.params),
+        self.electrons.reshape(-1, *self.electrons.shape[2:]),
+        np.asarray(dedup_pytree(self.opt_state), dtype="object"),
+        0.3,
+    )
 
 def reduplicate(self: CheckpointState):
     assert self.data.ndim == 3, "data has wrong shape to reduplicate"
@@ -191,6 +198,12 @@ class LogManager:
         logger.info("Saving checkpoint %s", ckpt_path)
         with ckpt_path.open("wb") as f:
             np.savez_compressed(f, step=step, **deduplicate(state)._asdict())
+
+    def save_dmc_checkpoint(self, step: int, state: DMCCheckpointState) -> None:
+        ckpt_path = self.save_path / f"ckpt_{step:06d}.npz"
+        logger.info("Saving checkpoint %s", ckpt_path)
+        with ckpt_path.open("wb") as f:
+            np.savez_compressed(f, step=step, **dmc_deduplicate(state)._asdict())
 
     def try_restore_checkpoint(self) -> tuple[int, CheckpointState] | None:
         """Try to restore checkpoints from `restore_path`."""

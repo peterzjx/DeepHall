@@ -37,7 +37,8 @@ from deephall.dmc import dmc
 from deephall.dmc.dmc import WalkerState
 from chex import ArrayTree
 import deephall.dmc.velocity_utils as v_utils
-
+from pathlib import Path
+from upath import UPath
 logger = logging.getLogger("deephall")
 
 
@@ -90,6 +91,41 @@ def initalize_state(cfg: Config, model: nn.Module):
 
     return 0, dmc_state
 
+def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCCheckpointState]:
+    """Resore a given checkpoint.
+
+    Args:
+        ckpt: Checkpoint path.
+
+    Returns:
+        A tuple containing current step and state.
+    """
+    ckpt_path = UPath(ckpt)
+    key_data, key_params = jax.random.split(jax.random.PRNGKey(cfg.seed))
+    coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
+    coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
+    v_0 = jnp.ones_like(coords)
+    logpsi_0 = jnp.zeros(coords.shape[:-2])
+    d_0 = v_utils.calculate_d_metric(coords)
+    
+    with ckpt_path.open("rb") as npf, np.load(npf, allow_pickle=True) as f:
+        step = f["step"].tolist() + 1
+        params = f["params"].tolist()
+        # logger.info("Restored checkpoint %s", ckpt_path)
+        dmc_state = DMCCheckpointState(
+        params=kfac_jax.utils.replicate_all_local_devices(params),
+        electrons=coords,
+        electrons_xy=coords,
+        d_metric=d_0,
+        v=v_0,
+        lnpsi=logpsi_0,
+        local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
+        weights=jnp.ones_like(logpsi_0),
+        dmc_mean_energy=jnp.zeros_like(logpsi_0),
+        dmc_run_step=jnp.zeros_like(logpsi_0),
+        opt_state=None
+    )
+        return step, dmc_state
 
 def setup_mcmc(cfg: Config, network: LogPsiNetwork):
     if cfg.mcmc.use_dmc:
@@ -107,7 +143,8 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
             batch_per_device=cfg.batch_size // jax.device_count(),
             steps=cfg.mcmc.steps
         )
-    pmap_mcmc_step = constants.pmap(mcmc_step)
+    # pmap_mcmc_step = constants.pmap(mcmc_step)
+    pmap_mcmc_step = constants.pmap(mcmc_step, donate_argnums=1)
     pmoves = np.zeros(cfg.mcmc.adapt_frequency)
     return pmap_mcmc_step, pmoves
 
@@ -133,17 +170,17 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
-        # walker_state = WalkerState(
-        #     electrons=walker_state.electrons,
-        #     electrons_xy=walker_state.electrons_xy,
-        #     v=walker_state.v,
-        #     lnpsi=walker_state.lnpsi,
-        #     local_energy=walker_state.local_energy,
-        #     dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
-        #     weights=walker_state.weights,
-        #     d_metric=walker_state.d_metric,
-        #     dmc_run_step=walker_state.dmc_run_step
-        # )
+        walker_state = WalkerState(
+            electrons=walker_state.electrons,
+            electrons_xy=walker_state.electrons_xy,
+            v=walker_state.v,
+            lnpsi=walker_state.lnpsi,
+            local_energy=walker_state.local_energy,
+            dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
+            weights=walker_state.weights,
+            d_metric=walker_state.d_metric,
+            dmc_run_step=walker_state.dmc_run_step
+        )
     return walker_state
 def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
     new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
