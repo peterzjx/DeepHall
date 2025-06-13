@@ -25,15 +25,15 @@ for file_name in sys.argv[1:]:
     df = pd.read_csv(file_name)
     x0 = df["step"]
     x0 = range(len(x0))
-    y0 = df["history_mean_energy"]
-    y1 = df["local_energy"]
-    y2 = df["dmc_mean_energy"]
+    y0 = df["energy"]
+    # y1 = df["local_energy"]
+    # y2 = df["dmc_mean_energy"]
     
     y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
     y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
-    plt.plot(x0, y1, '.-')
-    plt.plot(x0, y2, '--')
+    # plt.plot(x0, y1, '.-')
+    # plt.plot(x0, y2, '--')
     plt.plot(x0, y0_smoothed, 'o-', label=file_name,  color='red')
     plt.legend()
     print(np.mean(y0_smoothed[-100:]))

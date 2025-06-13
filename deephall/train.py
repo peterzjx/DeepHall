@@ -64,13 +64,13 @@ def initalize_state(cfg: Config, model: nn.Module):
         model.init(key_params, data[0, 0])
     )
     mcmc_width = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(cfg.mcmc.width))
-    # return 0, CheckpointState(params, data, None, mcmc_width)
-
-
-    walker_state = WalkerState(
-        electrons=data,
-    )
-    return 0, DMCCheckpointState(params, walker_state, None)
+    if cfg.mcmc.use_dmc == False:
+        return 0, CheckpointState(params, data, None, mcmc_width)
+    else:
+        walker_state = WalkerState(
+            electrons=data,
+        )
+        return 0, DMCCheckpointState(params, walker_state, None)
 
 
 def setup_mcmc(cfg: Config, network: LogPsiNetwork):

@@ -66,7 +66,7 @@ def dmc_train(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = jnp.stack([state.weights, state.local_energy], axis= -1)
 
-    opt_init, dmc_training_step = optimizers.make_optimizer_step(cfg, network)
+    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
 
     
 
