@@ -108,3 +108,71 @@ def make_loss_fn(
             return stats, tangent_out
 
     return loss_and_grad
+
+def make_dmc_loss_fn(
+    network: LogPsiNetwork, system: System, mode: LossMode = LossMode.ENERGY_GRAD
+) -> Callable[[ArrayTree, jnp.ndarray], tuple[LossStats, jnp.ndarray]]:
+    loss_fn = local_energy(network, system)
+    batch_local_energy = jax.vmap(loss_fn, in_axes=(None, 0))
+
+    df_real = jax.vmap(
+        jax.value_and_grad(lambda params, x: network(params, x).real), in_axes=(None, 0)
+    )
+    df_imag = jax.vmap(
+        jax.value_and_grad(lambda params, x: network(params, x).imag), in_axes=(None, 0)
+    )
+
+    def loss_prod(grad_logpsi_conj, diff):
+        diff = diff.reshape(
+            diff.shape + (1,) * (len(grad_logpsi_conj.shape) - len(diff.shape))
+        )
+        return jnp.nan_to_num(2 * jnp.nanmean(grad_logpsi_conj * diff, axis=0))
+
+    def loss_and_grad(params: ArrayTree, data: jnp.ndarray, weights: jnp.ndarray):
+
+        el, other_observables = batch_local_energy(params, data)
+        el = el * weights / jnp.sum(weights)
+        other_observables = other_observables * weights / jnp.sum(weights)
+        pmean_observables = cast(
+            OtherObservables,
+            jax.tree.map(lambda x: constants.pmean(jnp.mean(x)), other_observables),
+        )
+
+        loss = constants.pmean(jnp.nanmean(el))
+        clipped_loss = constants.pmean(jnp.nanmean(iqr_clip(el)))
+        diff_to_clip = el - clipped_loss
+        if system.lz_penalty:
+            lz_square = other_observables["angular_momentum_z_square"]
+            lz = other_observables["angular_momentum_z"]
+            clipped_lz_square = constants.pmean(jnp.nanmean(iqr_clip(lz_square)))
+            clipped_lz = constants.pmean(jnp.nanmean(iqr_clip(lz)))
+            diff_to_clip += system.lz_penalty * (
+                (lz_square - clipped_lz_square)
+                - 2 * system.lz_center * (lz - clipped_lz)
+            )
+        if system.l2_penalty:
+            l2 = other_observables["angular_momentum_square"]
+            clipped_l2 = constants.pmean(jnp.nanmean(iqr_clip(l2)))
+            diff_to_clip += system.l2_penalty * (l2 - clipped_l2)
+        diff = iqr_clip(diff_to_clip)
+
+        variance = constants.pmean(jnp.nanmean(el.real**2) - loss.real**2)
+        stats = LossStats(**pmean_observables, energy=loss, variance=variance)
+        if mode == LossMode.ENERGY_DIFF:
+            return stats, diff
+
+        primal_real, tangent_real = df_real(params, data)
+        _, tangent_imag = df_imag(params, data)
+        kfac_jax.register_normal_predictive_distribution(primal_real[:, None])
+        tangent_out = jax.tree.map(
+            lambda real, imag: loss_prod(real - 1j * imag, diff),
+            tangent_real,
+            tangent_imag,
+        )
+
+        if mode == LossMode.ENERGY_GRAD:
+            return stats, jax.tree.map(jnp.real, tangent_out)
+        elif mode == LossMode.SR_F_VECTOR:
+            return stats, tangent_out
+
+    return loss_and_grad

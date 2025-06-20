@@ -163,6 +163,63 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
 def weighted_mean_energy(walker_state: WalkerState):
     weighted_energy = jnp.sum(walker_state.weights * walker_state.local_energy) / jnp.sum(walker_state.weights)
     return weighted_energy
+import jax
+import jax.numpy as jnp
+
+import jax
+import jax.numpy as jnp
+
+def renormalize_weight(
+    W: jnp.ndarray,
+    energy: jnp.ndarray,
+    coord: jnp.ndarray,
+    coord_xy: jnp.ndarray,
+    velocity: jnp.ndarray,
+    lnpsi: jnp.ndarray,
+    dmat: jnp.ndarray,
+):
+    """
+    Applies normalization logic to W and replaces corresponding entries in
+    energy, coord, coord_xy, velocity, lnpsi, and dmat based on value thresholds.
+
+    Returns:
+        Tuple of updated arrays: (W, energy, coord, coord_xy, velocity, lnpsi, dmat)
+    """
+    idx1 = jnp.where(W < 0.1)[0]
+    idx2 = jnp.where(W > 2)[0]
+
+    n = jnp.minimum(idx1.shape[0], idx2.shape[0])
+
+    def apply_updates(args):
+        W, energy, coord, coord_xy, velocity, lnpsi, dmat = args
+        sel_idx1 = idx1[:n]
+        sel_idx2 = idx2[:n]
+
+        # Compute new W values
+        w_vals = W[sel_idx2] / 2
+        W = W.at[sel_idx2].set(w_vals)
+        W = W.at[sel_idx1].set(w_vals)
+
+        # Copy over corresponding entries
+        energy = energy.at[sel_idx1].set(energy[sel_idx2])
+        coord = coord.at[sel_idx1].set(coord[sel_idx2])
+        coord_xy = coord_xy.at[sel_idx1].set(coord_xy[sel_idx2])
+        velocity = velocity.at[sel_idx1].set(velocity[sel_idx2])
+        lnpsi = lnpsi.at[sel_idx1].set(lnpsi[sel_idx2])
+        dmat = dmat.at[sel_idx1].set(dmat[sel_idx2])
+
+        return W, energy, coord, coord_xy, velocity, lnpsi, dmat
+
+    def no_op(args):
+        return args
+
+    return jax.lax.cond(
+        n > 0,
+        apply_updates,
+        no_op,
+        (W, energy, coord, coord_xy, velocity, lnpsi, dmat),
+    )
+
 
 def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, use_external_energy: bool=False, external_energy: float=0.0):
     if step % update_interval == 0:
@@ -170,15 +227,22 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
+        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat = renormalize_weight(walker_state.weights, 
+                                                                                       walker_state.local_energy,
+                                                                                       walker_state.electrons,
+                                                                                       walker_state.electrons_xy,
+                                                                                       walker_state.v,
+                                                                                       walker_state.lnpsi,
+                                                                                       walker_state.d_metric)
         walker_state = WalkerState(
-            electrons=walker_state.electrons,
-            electrons_xy=walker_state.electrons_xy,
-            v=walker_state.v,
-            lnpsi=walker_state.lnpsi,
-            local_energy=walker_state.local_energy,
-            dmc_mean_energy=jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy,
-            weights=walker_state.weights,
-            d_metric=walker_state.d_metric,
+            electrons=ele,
+            electrons_xy=ele_xy,
+            v=velocity,
+            lnpsi=lnpsi,
+            local_energy=local_energy,
+            dmc_mean_energy=(jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy + walker_state.dmc_mean_energy) / 2,
+            weights=weights,
+            d_metric=dmat,
             dmc_run_step=walker_state.dmc_run_step
         )
     return walker_state

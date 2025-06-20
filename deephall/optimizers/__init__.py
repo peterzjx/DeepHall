@@ -14,7 +14,7 @@
 
 
 from deephall.config import Config, OptimizerName
-from deephall.loss import make_loss_fn
+from deephall.loss import make_loss_fn, make_dmc_loss_fn
 from deephall.types import LogPsiNetwork, TrainingInit, TrainingStep
 
 from .adam import make_adam_training_step
@@ -37,6 +37,6 @@ def make_optimizer_step(
 def make_optimizer_dmc_step(
     cfg: Config, network: LogPsiNetwork
 ) -> tuple[TrainingInit, TrainingStep]:
-    loss_grad_fn = make_loss_fn(network, cfg.system)
+    loss_grad_fn = make_loss_fn(network, cfg.system) #loss_grad_fn(params, data, weights)
     assert cfg.optim.optimizer == OptimizerName.kfac
     return make_kfac_training_dmc_step(cfg.optim.kfac, loss_grad_fn)
