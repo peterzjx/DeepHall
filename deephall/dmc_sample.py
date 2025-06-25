@@ -190,11 +190,8 @@ def renormalize_weight(
     and set both W[idx_max] and W[idx_min] to W[idx_max]/2.
     
     Returns:
-        Tuple of updated arrays: (W, energy, coord, coord_xy, velocity, lnpsi, dmat)
+        Tuple of updated arrays: (W, energy, coord, coord_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max, changed)
     """
-    original_shape = W.shape
-    print('W shape', original_shape)
-
     # Find indices of maximum and minimum W values
     idx_max = jnp.argmax(W)
     idx_min = jnp.argmin(W)
@@ -204,54 +201,89 @@ def renormalize_weight(
     w_min = W[idx_min]
     
     # Check condition: W[idx_max] is large and W[idx_min] is small
-    condition = (w_max > 2.0) & (w_min < 0.1)
-
-    def apply_updates(args):
-        W, energy, coord, coord_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max = args
-        
-        # Calculate new weight value
-        new_weight = w_max / 2.0
-        
-        # Update W values
-        W = W.at[idx_max].set(new_weight)
-        W = W.at[idx_min].set(new_weight)
-
-        # Copy idx_max row to idx_min row for all tensors
-        energy = energy.at[idx_min].set(energy[idx_max])
-        coord = coord.at[idx_min].set(coord[idx_max])
-        coord_xy = coord_xy.at[idx_min].set(coord_xy[idx_max])
-        velocity = velocity.at[idx_min].set(velocity[idx_max])
-        lnpsi = lnpsi.at[idx_min].set(lnpsi[idx_max])
-        dmat = dmat.at[idx_min].set(dmat[idx_max])
-
-        return W, energy, coord, coord_xy, velocity, lnpsi, dmat
-
-    def no_op(args):
-        W, energy, coord, coord_xy, velocity, lnpsi, dmat, _, _, _ = args
-        return W, energy, coord, coord_xy, velocity, lnpsi, dmat
-
-    return jax.lax.cond(
+    condition = (w_max > 1.3) & (w_min < 0.5)
+    
+    # Calculate new weight value (will be used if condition is True)
+    new_weight = w_max / 2.0
+    
+    # Create masks for the updates
+    max_mask = jnp.arange(W.shape[0]) == idx_max
+    min_mask = jnp.arange(W.shape[0]) == idx_min
+    
+    # Update W values conditionally
+    W_updated = jnp.where(
         condition,
-        apply_updates,
-        no_op,
-        (W, energy, coord, coord_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max)
+        jnp.where(max_mask | min_mask, new_weight, W),
+        W
     )
+    
+    # Update other tensors conditionally
+    energy_updated = jnp.where(
+        condition,
+        jnp.where(min_mask, energy[idx_max], energy),
+        energy
+    )
+    
+    coord_updated = jnp.where(
+        condition,
+        jnp.where(min_mask[:, None, None], coord[idx_max], coord),
+        coord
+    )
+    
+    coord_xy_updated = jnp.where(
+        condition,
+        jnp.where(min_mask[:, None, None], coord_xy[idx_max], coord_xy),
+        coord_xy
+    )
+    
+    velocity_updated = jnp.where(
+        condition,
+        jnp.where(min_mask[:, None, None], velocity[idx_max], velocity),
+        velocity
+    )
+    
+    lnpsi_updated = jnp.where(
+        condition,
+        jnp.where(min_mask, lnpsi[idx_max], lnpsi),
+        lnpsi
+    )
+    
+    dmat_updated = jnp.where(
+        condition,
+        jnp.where(min_mask[:, None, None], dmat[idx_max], dmat),
+        dmat
+    )
+    
+    # Return 1 if condition was met, 0 otherwise
+    changed = jnp.where(condition, 1, 0)
+    
+    return W_updated, energy_updated, coord_updated, coord_xy_updated, velocity_updated, lnpsi_updated, dmat_updated, idx_max, idx_min, w_max, changed
 
 
 def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, use_external_energy: bool=False, external_energy: float=0.0):
-    walker_changed = 0
+    changed = 0
     if step % update_interval == 0:
         if use_external_energy:
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
-        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat = renormalize_weight(walker_state.weights, 
+        pmap_renormalize_weight = constants.pmap(renormalize_weight)
+        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max, changed = pmap_renormalize_weight(walker_state.weights, 
                                                                                        walker_state.local_energy,
                                                                                        walker_state.electrons,
                                                                                        walker_state.electrons_xy,
                                                                                        walker_state.v,
                                                                                        walker_state.lnpsi,
                                                                                        walker_state.d_metric)
+        assert (weights.shape == walker_state.weights.shape)
+        assert (local_energy.shape == walker_state.local_energy.shape), f'{local_energy.shape} != {walker_state.local_energy.shape}'
+        assert (ele.shape == walker_state.electrons.shape)
+        assert (ele_xy.shape == walker_state.electrons_xy.shape)
+        assert (velocity.shape == walker_state.v.shape)
+        assert (lnpsi.shape == walker_state.lnpsi.shape)
+        assert (dmat.shape == walker_state.d_metric.shape)
+
+        print('changed', changed)
         walker_state = WalkerState(
             electrons=ele,
             electrons_xy=ele_xy,
@@ -263,7 +295,7 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             d_metric=dmat,
             dmc_run_step=walker_state.dmc_run_step
         )
-    return walker_state, walker_changed
+    return walker_state, changed
 
 def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
     new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)

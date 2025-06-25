@@ -69,7 +69,7 @@ def run_dmc(simple_config: Config):
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
         energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-        walker_state, walker_changed = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
+        walker_state, changed = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
             
     with log_manager.create_writer() as writer:
         for step in range(simple_config.mcmc.iteration):
@@ -78,17 +78,17 @@ def run_dmc(simple_config: Config):
             walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
             energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, max_length=1000)
             print('step ', step, ' before renormalization: max w', jnp.max(walker_state.weights))
-            print('# > 2', jnp.sum(walker_state.weights > 2))
+            # print('# > 2', jnp.sum(walker_state.weights > 2))
             print('min w', jnp.min(walker_state.weights))
-            print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
-            print('STD w', jnp.std(walker_state.weights))
-            walker_state, walker_changed = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1000, use_external_energy=True, external_energy=mean_energy)
-            print('n_changed', walker_changed)
+            # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
+            # print('STD w', jnp.std(walker_state.weights))
+            walker_state, changed = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1000, use_external_energy=True, external_energy=mean_energy)
             print('after: max w', jnp.max(walker_state.weights))
-            print('# > 2', jnp.sum(walker_state.weights > 2))
+            # print('# > 2', jnp.sum(walker_state.weights > 2))
             print('min w', jnp.min(walker_state.weights))
-            print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
-            print('STD w', jnp.std(walker_state.weights))
+            print('changed', changed)
+            # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
+            # print('STD w', jnp.std(walker_state.weights))
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
