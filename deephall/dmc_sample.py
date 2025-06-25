@@ -39,6 +39,7 @@ from chex import ArrayTree
 import deephall.dmc.velocity_utils as v_utils
 from pathlib import Path
 from upath import UPath
+from jax import lax
 logger = logging.getLogger("deephall")
 
 
@@ -84,7 +85,7 @@ def initalize_state(cfg: Config, model: nn.Module):
         lnpsi=logpsi_0,
         local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
         weights=jnp.ones_like(logpsi_0),
-        dmc_mean_energy=jnp.zeros_like(logpsi_0),
+        dmc_mean_energy=jnp.ones_like(logpsi_0)*cfg.initial_energy,
         dmc_run_step=jnp.zeros_like(logpsi_0),
         opt_state=None
     )
@@ -185,15 +186,22 @@ def renormalize_weight(
     Returns:
         Tuple of updated arrays: (W, energy, coord, coord_xy, velocity, lnpsi, dmat)
     """
+    original_shape = W.shape
+    print('W shape', original_shape)
+    # W = jnp.ravel(W)
     idx1 = jnp.where(W < 0.1)[0]
-    idx2 = jnp.where(W > 2)[0]
-
+    idx2 = jnp.where(W > 0)[0]
+    print(idx2)
+    # W.reshape(original_shape)
+    print('Wb shape', original_shape)
     n = jnp.minimum(idx1.shape[0], idx2.shape[0])
 
     def apply_updates(args):
-        W, energy, coord, coord_xy, velocity, lnpsi, dmat = args
-        sel_idx1 = idx1[:n]
-        sel_idx2 = idx2[:n]
+        W, energy, coord, coord_xy, velocity, lnpsi, dmat, n = args
+        # sel_idx1 = idx1[:n]
+        # sel_idx2 = idx2[:n]
+        sel_idx1 = lax.dynamic_slice(idx1, start_indices=(0,), slice_sizes=(n,))
+        sel_idx2 = lax.dynamic_slice(idx2, start_indices=(0,), slice_sizes=(n,))
 
         # Compute new W values
         w_vals = W[sel_idx2] / 2
@@ -208,7 +216,7 @@ def renormalize_weight(
         lnpsi = lnpsi.at[sel_idx1].set(lnpsi[sel_idx2])
         dmat = dmat.at[sel_idx1].set(dmat[sel_idx2])
 
-        return W, energy, coord, coord_xy, velocity, lnpsi, dmat
+        return W, energy, coord, coord_xy, velocity, lnpsi, dmat, n
 
     def no_op(args):
         return args
@@ -217,17 +225,18 @@ def renormalize_weight(
         n > 0,
         apply_updates,
         no_op,
-        (W, energy, coord, coord_xy, velocity, lnpsi, dmat),
+        (W, energy, coord, coord_xy, velocity, lnpsi, dmat, n)
     )
 
 
 def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, use_external_energy: bool=False, external_energy: float=0.0):
+    walker_changed = 0
     if step % update_interval == 0:
         if use_external_energy:
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
-        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat = renormalize_weight(walker_state.weights, 
+        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat, walker_changed = renormalize_weight(walker_state.weights, 
                                                                                        walker_state.local_energy,
                                                                                        walker_state.electrons,
                                                                                        walker_state.electrons_xy,
@@ -245,7 +254,7 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             d_metric=dmat,
             dmc_run_step=walker_state.dmc_run_step
         )
-    return walker_state
+    return walker_state, walker_changed
 def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
     new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
     if energy_hist == None:

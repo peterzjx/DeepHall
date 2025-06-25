@@ -18,12 +18,12 @@ from deephall.train import train
 
 if __name__=="__main__":
     config = Config(network=Network(
-            type=NetworkType.parton,
-            parton=PartonNetwork(
-                fermionic_type=FermionicType.pfaffian,
-                flux_type=FluxType.symmetric_mlp_network
-            )
-            # type=NetworkType.psiformer
+            # type=NetworkType.parton,
+            # parton=PartonNetwork(
+            #     fermionic_type=FermionicType.pfaffian,
+            #     flux_type=FluxType.symmetric_mlp_network
+            # )
+            type=NetworkType.psiformer
         ))
     config.seed = 564
     config.system.nspins = (4, 0)

@@ -71,8 +71,8 @@ def log_green_function_branching(local_energy: jnp.ndarray, next_local_energy: j
 
 def reweight_walkers(weights: jnp.ndarray, local_energy: jnp.ndarray, next_local_energy: jnp.ndarray, kappa_tau: float, total_mean_energy: float):
     weights = weights * jnp.exp(log_green_function_branching(local_energy, next_local_energy, kappa_tau, total_mean_energy))
-    # n_walkers = weights.shape[0]
-    # weights = jnp.sqrt(n_walkers) * weights / jnp.linalg.norm(weights)  # TODO: check if this is correct    
+    n_walkers = weights.shape[0]
+    weights = jnp.sqrt(n_walkers) * weights / jnp.linalg.norm(weights)  # TODO: check if this is correct    
     return weights
 
 
@@ -233,8 +233,8 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     
     # total_mean_energy = walker_state.dmc_mean_energy
 
-    # next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, system.kappa_tau, walker_state.dmc_mean_energy)
-    next_walker_weights = walker_state.weights #without reweighting, it is identical to VMC TODO: verify that it resembles VMC
+    next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, system.kappa_tau, walker_state.dmc_mean_energy)
+    # next_walker_weights = walker_state.weights #without reweighting, it is identical to VMC TODO: verify that it resembles VMC
     next_walker_state = WalkerState(
         electrons=next_electrons,
         electrons_xy=next_electrons_xy,

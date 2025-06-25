@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-for Ne in [4]:
+for Ne in [6]:
     for kappa in [1.0]:
         config = Config(network=Network(
             type=NetworkType.psiformer,
@@ -17,13 +17,13 @@ for Ne in [4]:
         ))
         config.system.interaction_strength = kappa
         config.system.nspins = (Ne, 0)
-        config.system.flux = 2*Ne+1
-        config.optim.iterations  = 13000
+        config.system.flux = (5*Ne-8) // 2
+        config.optim.iterations  = 50000
         config.batch_size = 6
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"
-        config.log.save_path = f"../logs/psiformer_{Ne}_kappa_{kappa}"
+        config.log.save_path = f"../logs/psiformer25_{Ne}_kappa_{kappa}"
         train(config)
 
         # config = Config(network=Network(type=NetworkType.psiformer))
