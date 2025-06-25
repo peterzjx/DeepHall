@@ -182,50 +182,59 @@ def renormalize_weight(
     """
     Applies normalization logic to W and replaces corresponding entries in
     energy, coord, coord_xy, velocity, lnpsi, and dmat based on value thresholds.
-
+    W: [nwalkers]
+    all other tensors: [nwalkers, ...]
+    
+    Find largest (idx_max) and smallest (idx_min) W values.
+    If W[idx_max] is `large` and W[idx_min] is `small`, copy idx_max row to idx_min row
+    and set both W[idx_max] and W[idx_min] to W[idx_max]/2.
+    
     Returns:
         Tuple of updated arrays: (W, energy, coord, coord_xy, velocity, lnpsi, dmat)
     """
     original_shape = W.shape
     print('W shape', original_shape)
-    # W = jnp.ravel(W)
-    idx1 = jnp.where(W < 0.1)[0]
-    idx2 = jnp.where(W > 0)[0]
-    print(idx2)
-    # W.reshape(original_shape)
-    print('Wb shape', original_shape)
-    n = jnp.minimum(idx1.shape[0], idx2.shape[0])
+
+    # Find indices of maximum and minimum W values
+    idx_max = jnp.argmax(W)
+    idx_min = jnp.argmin(W)
+    
+    # Get the actual values
+    w_max = W[idx_max]
+    w_min = W[idx_min]
+    
+    # Check condition: W[idx_max] is large and W[idx_min] is small
+    condition = (w_max > 2.0) & (w_min < 0.1)
 
     def apply_updates(args):
-        W, energy, coord, coord_xy, velocity, lnpsi, dmat, n = args
-        # sel_idx1 = idx1[:n]
-        # sel_idx2 = idx2[:n]
-        sel_idx1 = lax.dynamic_slice(idx1, start_indices=(0,), slice_sizes=(n,))
-        sel_idx2 = lax.dynamic_slice(idx2, start_indices=(0,), slice_sizes=(n,))
+        W, energy, coord, coord_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max = args
+        
+        # Calculate new weight value
+        new_weight = w_max / 2.0
+        
+        # Update W values
+        W = W.at[idx_max].set(new_weight)
+        W = W.at[idx_min].set(new_weight)
 
-        # Compute new W values
-        w_vals = W[sel_idx2] / 2
-        W = W.at[sel_idx2].set(w_vals)
-        W = W.at[sel_idx1].set(w_vals)
+        # Copy idx_max row to idx_min row for all tensors
+        energy = energy.at[idx_min].set(energy[idx_max])
+        coord = coord.at[idx_min].set(coord[idx_max])
+        coord_xy = coord_xy.at[idx_min].set(coord_xy[idx_max])
+        velocity = velocity.at[idx_min].set(velocity[idx_max])
+        lnpsi = lnpsi.at[idx_min].set(lnpsi[idx_max])
+        dmat = dmat.at[idx_min].set(dmat[idx_max])
 
-        # Copy over corresponding entries
-        energy = energy.at[sel_idx1].set(energy[sel_idx2])
-        coord = coord.at[sel_idx1].set(coord[sel_idx2])
-        coord_xy = coord_xy.at[sel_idx1].set(coord_xy[sel_idx2])
-        velocity = velocity.at[sel_idx1].set(velocity[sel_idx2])
-        lnpsi = lnpsi.at[sel_idx1].set(lnpsi[sel_idx2])
-        dmat = dmat.at[sel_idx1].set(dmat[sel_idx2])
-
-        return W, energy, coord, coord_xy, velocity, lnpsi, dmat, n
+        return W, energy, coord, coord_xy, velocity, lnpsi, dmat
 
     def no_op(args):
-        return args
+        W, energy, coord, coord_xy, velocity, lnpsi, dmat, _, _, _ = args
+        return W, energy, coord, coord_xy, velocity, lnpsi, dmat
 
     return jax.lax.cond(
-        n > 0,
+        condition,
         apply_updates,
         no_op,
-        (W, energy, coord, coord_xy, velocity, lnpsi, dmat, n)
+        (W, energy, coord, coord_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max)
     )
 
 
@@ -236,7 +245,7 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
-        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat, walker_changed = renormalize_weight(walker_state.weights, 
+        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat = renormalize_weight(walker_state.weights, 
                                                                                        walker_state.local_energy,
                                                                                        walker_state.electrons,
                                                                                        walker_state.electrons_xy,
@@ -255,6 +264,7 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             dmc_run_step=walker_state.dmc_run_step
         )
     return walker_state, walker_changed
+
 def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
     new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
     if energy_hist == None:
