@@ -28,15 +28,29 @@ for file_name in sys.argv[1:]:
     y0 = df["history_mean_energy"]
     y1 = df["local_energy"]
     y2 = df["dmc_mean_energy"]
-    
+    weight_std = df["weight_std"]
+    w_max = df["weight_max"]
+    w_min = df["weight_min"]
     y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
     y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
-    plt.plot(x0, y1, '.-')
-    plt.plot(x0, y2, '--')
-    plt.plot(x0, y0_smoothed, 'o-', label=file_name,  color='red')
-    plt.legend()
-    print(np.mean(y0_smoothed[-100:]))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))  # 1 row, 2 columns
+    ax1.set_title('Energy')
+    ax2.set_title('Walekr Weights STD')
+
+    plt.tight_layout()
+    
+    ax1.plot(x0, y1, '.-')
+    ax1.plot(x0, y2, '--')
+    ax1.plot(x0, y0_smoothed, 'o-', label=file_name,  color='red')
+    ax1.legend()
+    ax2.plot(x0, weight_std, '-', color='black')
+    ax2.plot(x0, w_max, '-', color='red')
+    ax2.plot(x0, w_min, '-', color='blue')
+    ax2.set_ylim(0, 5.0)
+    ax2.legend()
+    length = len(y0)
+    print(np.mean(y0[-length // 4:]))
 # df = pd.read_csv(sys.argv[2])
 # x1 = df["step"]
 # y1 = df["energy"]

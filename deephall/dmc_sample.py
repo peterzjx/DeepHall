@@ -201,7 +201,11 @@ def renormalize_weight(
     w_min = W[idx_min]
     
     # Check condition: W[idx_max] is large and W[idx_min] is small
-    condition = (w_max > 1.3) & (w_min < 0.5)
+    condition = (w_max > 2.0) & (w_min < 0.1)
+    # if not jnp.any(condition):
+    #     return W_updated, energy_updated, coord_updated, coord_xy_updated, velocity_updated, lnpsi_updated, dmat_updated, idx_max, idx_min, w_max, changed, conditioned, change_shape
+    conditioned = condition
+    change_shape = W.shape
     
     # Calculate new weight value (will be used if condition is True)
     new_weight = w_max / 2.0
@@ -257,24 +261,36 @@ def renormalize_weight(
     # Return 1 if condition was met, 0 otherwise
     changed = jnp.where(condition, 1, 0)
     
-    return W_updated, energy_updated, coord_updated, coord_xy_updated, velocity_updated, lnpsi_updated, dmat_updated, idx_max, idx_min, w_max, changed
+    return W_updated, energy_updated, coord_updated, coord_xy_updated, velocity_updated, lnpsi_updated, dmat_updated, idx_max, idx_min, w_max, changed, conditioned, change_shape
 
 
-def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, use_external_energy: bool=False, external_energy: float=0.0):
+def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, reweight_interval: int=10, use_external_energy: bool=False, external_energy: float=0.0):
     changed = 0
+    idx_min = None
+    conditioned = None
+    change_shape = walker_state.weights.shape
+    pmap_renormalize_weight = constants.pmap(renormalize_weight)
+    dmc_mean_energy_new = walker_state.dmc_mean_energy
+    renormalized = False
+    if step % reweight_interval != 0 and step % update_interval != 0:
+        return walker_state, changed, idx_min, conditioned, change_shape
+
     if step % update_interval == 0:
         if use_external_energy:
             weighted_energy = external_energy
         else:
             weighted_energy = weighted_mean_energy(walker_state)
-        pmap_renormalize_weight = constants.pmap(renormalize_weight)
-        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max, changed = pmap_renormalize_weight(walker_state.weights, 
-                                                                                       walker_state.local_energy,
-                                                                                       walker_state.electrons,
-                                                                                       walker_state.electrons_xy,
-                                                                                       walker_state.v,
-                                                                                       walker_state.lnpsi,
-                                                                                       walker_state.d_metric)
+        dmc_mean_energy_new = 0.5 * (jnp.mean(walker_state.dmc_mean_energy) + weighted_energy)
+
+    if step % reweight_interval == 0:
+        renormalized = True
+        weights, local_energy, ele, ele_xy, velocity, lnpsi, dmat, idx_max, idx_min, w_max, changed, conditioned, change_shape = pmap_renormalize_weight(walker_state.weights, 
+                                                                                        walker_state.local_energy,
+                                                                                        walker_state.electrons,
+                                                                                        walker_state.electrons_xy,
+                                                                                        walker_state.v,
+                                                                                        walker_state.lnpsi,
+                                                                                        walker_state.d_metric)
         assert (weights.shape == walker_state.weights.shape)
         assert (local_energy.shape == walker_state.local_energy.shape), f'{local_energy.shape} != {walker_state.local_energy.shape}'
         assert (ele.shape == walker_state.electrons.shape)
@@ -282,23 +298,35 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
         assert (velocity.shape == walker_state.v.shape)
         assert (lnpsi.shape == walker_state.lnpsi.shape)
         assert (dmat.shape == walker_state.d_metric.shape)
-
-        print('changed', changed)
+    
+    if renormalized == True:
         walker_state = WalkerState(
             electrons=ele,
             electrons_xy=ele_xy,
             v=velocity,
             lnpsi=lnpsi,
             local_energy=local_energy,
-            dmc_mean_energy=(jnp.ones_like(walker_state.dmc_mean_energy ) * weighted_energy + walker_state.dmc_mean_energy) / 2,
+            dmc_mean_energy = jnp.ones_like(walker_state.dmc_mean_energy ) * dmc_mean_energy_new,
             weights=weights,
             d_metric=dmat,
             dmc_run_step=walker_state.dmc_run_step
         )
-    return walker_state, changed
+    else:
+        walker_state = WalkerState(
+            electrons=walker_state.electrons,
+            electrons_xy=walker_state.electrons_xy,
+            v=walker_state.v,
+            lnpsi=walker_state.lnpsi,
+            local_energy=walker_state.local_energy,
+            dmc_mean_energy = jnp.ones_like(walker_state.dmc_mean_energy ) * dmc_mean_energy_new,
+            weights=walker_state.weights,
+            d_metric=walker_state.d_metric,
+            dmc_run_step=walker_state.dmc_run_step
+        )
+    return walker_state, changed, idx_min, conditioned, change_shape
 
 def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
-    new_hist = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
+    new_hist = jnp.array([weighted_mean_energy(walker_state=walker_state)])
     if energy_hist == None:
         energy_hist = new_hist
     else:
@@ -306,9 +334,7 @@ def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_l
         if energy_hist.shape[0]>max_length:
             new_len = new_hist.shape[0]
             energy_hist = energy_hist[new_len:]
-    weights = energy_hist[..., 0]
-    energies = energy_hist[..., 1]
-    mean_energy = jnp.sum(weights * energies) / jnp.sum(weights)
+    mean_energy = jnp.mean(energy_hist)
     return energy_hist, mean_energy
         
 # def sample_test(cfg: Config):

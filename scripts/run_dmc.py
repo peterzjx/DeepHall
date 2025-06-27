@@ -63,30 +63,36 @@ def run_dmc(simple_config: Config):
     print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
     key = jax.random.PRNGKey(simple_config.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
-    energy_history = jnp.stack([walker_state.weights, walker_state.local_energy], axis= -1)
+    energy_history = None
     
     for step in range(simple_config.mcmc.burn_in):
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
         energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-        walker_state, changed = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
-            
+        walker_state, changed, _, _, _ = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
+    walker_state, _, _, _, _ = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1, reweight_interval=1, use_external_energy=True, external_energy=mean_energy)            
+    energy_history = None
+    
     with log_manager.create_writer() as writer:
+        renormal_interval = 200
+        energy_update_interval = 1000
         for step in range(simple_config.mcmc.iteration):
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
-            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, max_length=1000)
-            print('step ', step, ' before renormalization: max w', jnp.max(walker_state.weights))
-            # print('# > 2', jnp.sum(walker_state.weights > 2))
-            print('min w', jnp.min(walker_state.weights))
-            # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
+            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
+            # print('step ', step, ' before renormalization: max w', jnp.max(walker_state.weights))
+            # # print('# > 2', jnp.sum(walker_state.weights > 2))
+            # print('min w', jnp.min(walker_state.weights))
+            # # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
             # print('STD w', jnp.std(walker_state.weights))
-            walker_state, changed = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1000, use_external_energy=True, external_energy=mean_energy)
-            print('after: max w', jnp.max(walker_state.weights))
-            # print('# > 2', jnp.sum(walker_state.weights > 2))
-            print('min w', jnp.min(walker_state.weights))
-            print('changed', changed)
+            walker_state, changed, idx_min, conditioned, change_shape = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
+            # print('after: max w', jnp.max(walker_state.weights))
+            # # print('# > 2', jnp.sum(walker_state.weights > 2))
+            # print('min w', jnp.min(walker_state.weights))
+            # print('changed', changed, idx_min, conditioned, change_shape)
+            # if changed>0:
+            #     input()
             # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
             # print('STD w', jnp.std(walker_state.weights))
             writer.log(
@@ -99,6 +105,9 @@ def run_dmc(simple_config: Config):
                 weight_min=f"{jnp.min(walker_state.weights):.6f}",
                 weight_std=f"{jnp.std(walker_state.weights):.6f}"
             )
+            if step%energy_update_interval==0 and (jnp.min(walker_state.weights)<0.1 or jnp.max(walker_state.weights)>3.0) and renormal_interval>10:
+                renormal_interval = renormal_interval - 1
+            assert renormal_interval>10
 if __name__=="__main__":
     config = Config(network=Network(
             type=NetworkType.laughlin
@@ -108,14 +117,14 @@ if __name__=="__main__":
             #     flux_type=FluxType.symmetric_mlp_network
             # )
         ))
-    config.seed = 564
+    config.seed = 126
     config.system.nspins = (4, 0)
     config.system.flux = 9
     config.system.tau = 0.001
-    config.system.interaction_strength = 1.0
+    config.system.interaction_strength = 4.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     # config.optim.iterations = 20000
-    config.batch_size = 64
+    config.batch_size = 128
     config.mcmc.width = 0.3
     config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
 
@@ -127,7 +136,7 @@ if __name__=="__main__":
     config.log.save_path = f"../logs/laughlin_4_kappa_{config.system.interaction_strength}_dmc"
 
     config.mcmc.use_dmc = True
-    config.mcmc.burn_in = 500
+    config.mcmc.burn_in = 1000
     config.mcmc.iteration = 50000
 
     run_dmc(config)
