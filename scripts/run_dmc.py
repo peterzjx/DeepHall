@@ -74,27 +74,14 @@ def run_dmc(simple_config: Config):
     energy_history = None
     
     with log_manager.create_writer() as writer:
-        renormal_interval = 200
+        renormal_interval = 100
         energy_update_interval = 1000
         for step in range(simple_config.mcmc.iteration):
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
             energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
-            # print('step ', step, ' before renormalization: max w', jnp.max(walker_state.weights))
-            # # print('# > 2', jnp.sum(walker_state.weights > 2))
-            # print('min w', jnp.min(walker_state.weights))
-            # # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
-            # print('STD w', jnp.std(walker_state.weights))
             walker_state, changed, idx_min, conditioned, change_shape = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
-            # print('after: max w', jnp.max(walker_state.weights))
-            # # print('# > 2', jnp.sum(walker_state.weights > 2))
-            # print('min w', jnp.min(walker_state.weights))
-            # print('changed', changed, idx_min, conditioned, change_shape)
-            # if changed>0:
-            #     input()
-            # print('# < 0.1', jnp.sum(walker_state.weights < 0.1))
-            # print('STD w', jnp.std(walker_state.weights))
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
@@ -105,7 +92,7 @@ def run_dmc(simple_config: Config):
                 weight_min=f"{jnp.min(walker_state.weights):.6f}",
                 weight_std=f"{jnp.std(walker_state.weights):.6f}"
             )
-            if step%energy_update_interval==0 and (jnp.min(walker_state.weights)<0.1 or jnp.max(walker_state.weights)>3.0) and renormal_interval>10:
+            if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
                 renormal_interval = renormal_interval - 1
             assert renormal_interval>10
 if __name__=="__main__":
@@ -120,8 +107,8 @@ if __name__=="__main__":
     config.seed = 126
     config.system.nspins = (4, 0)
     config.system.flux = 9
-    config.system.tau = 0.001
-    config.system.interaction_strength = 4.0
+    config.system.tau = 0.0001
+    config.system.interaction_strength = 6.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     # config.optim.iterations = 20000
     config.batch_size = 128

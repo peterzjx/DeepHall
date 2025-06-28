@@ -64,11 +64,9 @@ def dmc_train(cfg: Config):
     print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
-    energy_history = jnp.stack([state.weights, state.local_energy], axis= -1)
+    energy_history = None
 
     opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
-
-    
 
     if (
         cfg.optim.optimizer == OptimizerName.none
@@ -83,18 +81,16 @@ def dmc_train(cfg: Config):
 
     logger.info("Start DMC with %s JAX devices", jax.device_count())
 
-
     if initial_step == 0:
         for step in range(cfg.mcmc.burn_in):
-            # sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            # data, pmove = pmap_mcmc_step(params, data, subkey, mcmc_width)
-
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            # data, pmove= pmap_mcmc_step(params, data, subkey)
-            walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(state.params, walker_state, subkey)
-            # energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-            # walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
+            walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(state.params, walker_state, subkey)
+            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
+            walker_state, changed, _, _, _ = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
+        walker_state, _, _, _, _ = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1, reweight_interval=1, use_external_energy=True, external_energy=mean_energy)            
+        energy_history = None
         logger.info("Burn in DMC complete")
+        
         # if cfg.log.initial_energy:
         #     # Logging inital energy is helpful for debugging. If we have initial energy
         #     # but have error in training, it's probably optimizer's fault
@@ -109,36 +105,48 @@ def dmc_train(cfg: Config):
     killer = GracefulKiller()
     with log_manager.create_writer() as writer:
         writer.hide("kinetic", "potential", "Lz_square")
+        renormal_interval = 100
+        energy_update_interval = 1000
         for step in range(initial_step, cfg.optim.iterations):
-            print('Training step ', step)
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, _, _, _, _, _, _, _  = pmap_mcmc_step(state.params, walker_state, subkey)
-            # new_data, pmove  = pmap_mcmc_step(state.params, state.data, subkey, mcmc_width)
-
-            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=100, use_external_energy=True, external_energy=mean_energy)
+            walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(state.params, walker_state, subkey)
+            energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
+            walker_state, changed, idx_min, conditioned, change_shape = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
             state = update_from_walker_state(state, walker_state)
-            # dmc_state = dmc_state._replace(walker_state=walker_state)
-            
-            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            state, stats = dmc_training_step(state, subkey)
+            if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
+                renormal_interval = renormal_interval - 1
+            assert renormal_interval>10
             writer.log(
-                # step=str(step),
-                # pmove=f"{pmove[0]:.2f}",
-                # energy=f"{stats['energy'].real[0]:.4f}",
-                # # energy_imag=f"{stats['energy'].imag[0]:+.4f}",
-                # # potential=f"{stats['potential'][0]:.4f}",
-                # # kinetic=f"{stats['kinetic'].real[0]:.4f}",
-                # # variance=f"{stats['variance'][0]:.4f}",
-                # # Lz=f"{stats['angular_momentum_z'][0]:+.4f}",
-                # # Lz_square=f"{stats['angular_momentum_z_square'][0]:.4f}",
-                # # L_square=f"{stats['angular_momentum_square'][0]:.4f}",
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
                 local_energy=f"{dmc_sample.weighted_mean_energy(walker_state):.6f}",
                 dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.6f}",
-                history_mean_energy=f"{mean_energy:.6f}"
+                history_mean_energy=f"{mean_energy:.6f}",
+                weight_max=f"{jnp.max(walker_state.weights):.6f}",
+                weight_min=f"{jnp.min(walker_state.weights):.6f}",
+                weight_std=f"{jnp.std(walker_state.weights):.6f}"
             )
+            
+            
+            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+            state, stats = dmc_training_step(state, subkey)
+            # writer.log(
+            #     # step=str(step),
+            #     # pmove=f"{pmove[0]:.2f}",
+            #     # energy=f"{stats['energy'].real[0]:.4f}",
+            #     # # energy_imag=f"{stats['energy'].imag[0]:+.4f}",
+            #     # # potential=f"{stats['potential'][0]:.4f}",
+            #     # # kinetic=f"{stats['kinetic'].real[0]:.4f}",
+            #     # # variance=f"{stats['variance'][0]:.4f}",
+            #     # # Lz=f"{stats['angular_momentum_z'][0]:+.4f}",
+            #     # # Lz_square=f"{stats['angular_momentum_z_square'][0]:.4f}",
+            #     # # L_square=f"{stats['angular_momentum_square'][0]:.4f}",
+            #     step=str(step),
+            #     pmove=f"{pmove[0]:.2f}",
+            #     local_energy=f"{dmc_sample.weighted_mean_energy(walker_state):.6f}",
+            #     dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.6f}",
+            #     history_mean_energy=f"{mean_energy:.6f}"
+            # )
             current_time = time.time()
             if (
                 (

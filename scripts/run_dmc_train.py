@@ -31,10 +31,11 @@ if __name__=="__main__":
     config.system.tau = 0.001
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
-    config.optim.iterations = 10000
+    config.optim.iterations = 1000
     config.batch_size = 128
     config.mcmc.width = 0.3
-
+    config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
+    
     config.log.save_step_interval = 100
     config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0_dmc/ckpt_000709.npz"
     config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
@@ -44,6 +45,4 @@ if __name__=="__main__":
     # config.log.save_path = "../logs/laughlin_4_kappa_1.0_dmc"
     config.mcmc.use_dmc = True
     config.mcmc.burn_in = 200
-
-    # dmc_train.dmc_train(config)
-    train(config)
+    dmc_train.dmc_train(config)

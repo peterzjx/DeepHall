@@ -34,7 +34,7 @@ if __name__=="__main__":
     
     config.batch_size = 128
     config.mcmc.width = 0.3
-
+    config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
     config.log.save_step_interval = 100
     
     # config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
