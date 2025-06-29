@@ -66,7 +66,7 @@ def dmc_train(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
+    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network, walker_state.weights)
 
     if (
         cfg.optim.optimizer == OptimizerName.none

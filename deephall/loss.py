@@ -25,7 +25,7 @@ from deephall import constants
 from deephall.config import System
 from deephall.hamiltonian import OtherObservables, local_energy
 from deephall.types import LogPsiNetwork, LossStats
-
+from jax import numpy as jnp
 
 def iqr_clip_real(x: jnp.ndarray, scale=100.0) -> jnp.ndarray:
     q1 = jnp.nanquantile(x, 0.25)
@@ -110,10 +110,17 @@ def make_loss_fn(
     return loss_and_grad
 
 def make_dmc_loss_fn(
-    network: LogPsiNetwork, system: System, mode: LossMode = LossMode.ENERGY_GRAD
+    network: LogPsiNetwork, system: System, weight: jnp.ndarray, mode: LossMode = LossMode.ENERGY_GRAD
 ) -> Callable[[ArrayTree, jnp.ndarray], tuple[LossStats, jnp.ndarray]]:
     loss_fn = local_energy(network, system)
-    batch_local_energy = jax.vmap(loss_fn, in_axes=(None, 0))
+    
+    def make_weighted_loss(loss_fn, weight):
+        def weighted_loss(data):
+            return loss_fn(data) * weight
+        return weighted_loss
+    weighted_loss = make_weighted_loss(loss_fn, weight)
+
+    batch_local_energy = jax.vmap(weighted_loss, in_axes=(None, 0))
 
     df_real = jax.vmap(
         jax.value_and_grad(lambda params, x: network(params, x).real), in_axes=(None, 0)

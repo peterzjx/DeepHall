@@ -20,7 +20,7 @@ from deephall.types import LogPsiNetwork, TrainingInit, TrainingStep
 from .adam import make_adam_training_step
 from .kfac import make_kfac_training_step, make_kfac_training_dmc_step
 from .none import make_inference_step
-
+from jax import numpy as jnp
 
 def make_optimizer_step(
     cfg: Config, network: LogPsiNetwork
@@ -35,8 +35,8 @@ def make_optimizer_step(
     raise ValueError(f"Optimizer {cfg.optim.optimizer} is not implemented!")
 
 def make_optimizer_dmc_step(
-    cfg: Config, network: LogPsiNetwork
+    cfg: Config, network: LogPsiNetwork, weight: jnp.ndarray
 ) -> tuple[TrainingInit, TrainingStep]:
-    loss_grad_fn = make_loss_fn(network, cfg.system) #loss_grad_fn(params, data, weights)
+    loss_grad_fn = make_dmc_loss_fn(network, cfg.system, weight) #loss_grad_fn(params, data, weights)
     assert cfg.optim.optimizer == OptimizerName.kfac
     return make_kfac_training_dmc_step(cfg.optim.kfac, loss_grad_fn)
