@@ -23,7 +23,7 @@ from jax import numpy as jnp
 
 from deephall import constants
 from deephall.config import System
-from deephall.hamiltonian import OtherObservables, local_energy
+from deephall.hamiltonian import OtherObservables, local_energy, weighted_local_energy
 from deephall.types import LogPsiNetwork, LossStats
 from jax import numpy as jnp
 
@@ -110,17 +110,10 @@ def make_loss_fn(
     return loss_and_grad
 
 def make_dmc_loss_fn(
-    network: LogPsiNetwork, system: System, weight: jnp.ndarray, mode: LossMode = LossMode.ENERGY_GRAD
+    network: LogPsiNetwork, system: System, mode: LossMode = LossMode.ENERGY_GRAD
 ) -> Callable[[ArrayTree, jnp.ndarray], tuple[LossStats, jnp.ndarray]]:
-    loss_fn = local_energy(network, system)
-    
-    def make_weighted_loss(loss_fn, weight):
-        def weighted_loss(data):
-            return loss_fn(data) * weight
-        return weighted_loss
-    weighted_loss = make_weighted_loss(loss_fn, weight)
-
-    batch_local_energy = jax.vmap(weighted_loss, in_axes=(None, 0))
+    loss_fn = weighted_local_energy(network, system)
+    batch_weighted_local_energy = jax.vmap(loss_fn, in_axes=(None, 0))
 
     df_real = jax.vmap(
         jax.value_and_grad(lambda params, x: network(params, x).real), in_axes=(None, 0)
@@ -135,11 +128,12 @@ def make_dmc_loss_fn(
         )
         return jnp.nan_to_num(2 * jnp.nanmean(grad_logpsi_conj * diff, axis=0))
 
-    def loss_and_grad(params: ArrayTree, data: jnp.ndarray, weights: jnp.ndarray):
-
-        el, other_observables = batch_local_energy(params, data)
+    def loss_and_grad(params: ArrayTree, data_and_weights: tuple[jnp.ndarray, jnp.ndarray]):
+        data, weights = data_and_weights
+        el, other_observables = batch_weighted_local_energy(params, data_and_weights)
         el = el * weights / jnp.sum(weights)
-        other_observables = other_observables * weights / jnp.sum(weights)
+        # TODO: check if this is correct
+        # other_observables = other_observables * weights / jnp.sum(weights)
         pmean_observables = cast(
             OtherObservables,
             jax.tree.map(lambda x: constants.pmean(jnp.mean(x)), other_observables),

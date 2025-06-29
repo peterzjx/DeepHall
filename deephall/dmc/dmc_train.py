@@ -66,7 +66,7 @@ def dmc_train(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network, walker_state.weights)
+    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
 
     if (
         cfg.optim.optimizer == OptimizerName.none
@@ -77,7 +77,7 @@ def dmc_train(cfg: Config):
 
     if state.opt_state is None:
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-        state = state._replace(opt_state=opt_init(state.params, subkey, walker_state.electrons))
+        state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons, walker_state.weights)))
 
     logger.info("Start DMC with %s JAX devices", jax.device_count())
 

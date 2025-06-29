@@ -212,3 +212,50 @@ def local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
         }
 
     return _e_l
+
+def weighted_local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
+    """Creates the function to evaluate the local energy.
+
+    Args:
+        f: Callable which returns the sign and log of the magnitude of the
+            wavefunction given the network parameters and configurations data.
+        system: Config for system.
+
+    Returns:
+        Callable with signature e_l(params, key, data) which evaluates the local
+        energy of the wavefunction given the parameters params, RNG state key,
+        and a single MCMC configuration in data.
+    """
+    Q = system.flux / 2
+    radius = jnp.array(system.radius or jnp.sqrt(Q))
+    ke = make_local_kinetic_energy(f, Q, radius)
+    pe = make_potential(system.interaction_type, Q, radius)
+
+    def _e_l(
+        params: ArrayTree, data_and_weights: tuple[jnp.ndarray, jnp.ndarray]
+    ) -> tuple[jnp.ndarray, OtherObservables]:
+        """Returns the total energy.
+
+        Args:
+            params: network parameters.
+            data: MCMC configuration.
+
+        Returns:
+            Local energy and other observables.
+        """
+        data, weights = data_and_weights
+        print('data in _e_l', data.shape)
+        print('weights in _e_l', weights.shape)
+        potential = pe(data) * system.interaction_strength
+        kinetic, angular_momenta = ke(params, data)
+        kinetic = kinetic * weights / jnp.sum(weights)
+        potential = potential * weights / jnp.sum(weights)
+
+        # TODO: check if this is correct
+        # angular_momenta = angular_momenta * weights / jnp.sum(weights)
+        return kinetic + potential, angular_momenta | {
+            "potential": potential,
+            "kinetic": kinetic,
+        }
+
+    return _e_l

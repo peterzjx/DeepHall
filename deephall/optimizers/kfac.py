@@ -259,8 +259,8 @@ def make_kfac_training_step(
 def make_kfac_training_dmc_step(
     optim_cfg: OptimizerKfac, loss_grad_fn
 ) -> tuple[TrainingInit, TrainingStep]:
-    def val_and_grad(params, data):
-        stats, grads = loss_grad_fn(params, data)
+    def val_and_grad(params, data_and_weights):
+        stats, grads = loss_grad_fn(params, data_and_weights)
         return (stats["energy"], stats), grads
 
     optimizer = kfac_jax.Optimizer(
@@ -293,7 +293,7 @@ def make_kfac_training_dmc_step(
             params=params,
             state=opt_state,
             rng=key,
-            batch=electrons,
+            batch=(electrons, weights),  # Pass both electrons and weights as a tuple
             momentum=shared_mom,
             damping=shared_damping,
         )

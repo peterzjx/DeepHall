@@ -35,8 +35,8 @@ def make_optimizer_step(
     raise ValueError(f"Optimizer {cfg.optim.optimizer} is not implemented!")
 
 def make_optimizer_dmc_step(
-    cfg: Config, network: LogPsiNetwork, weight: jnp.ndarray
+    cfg: Config, network: LogPsiNetwork
 ) -> tuple[TrainingInit, TrainingStep]:
-    loss_grad_fn = make_dmc_loss_fn(network, cfg.system, weight) #loss_grad_fn(params, data, weights)
+    loss_grad_fn = make_dmc_loss_fn(network, cfg.system)
     assert cfg.optim.optimizer == OptimizerName.kfac
     return make_kfac_training_dmc_step(cfg.optim.kfac, loss_grad_fn)

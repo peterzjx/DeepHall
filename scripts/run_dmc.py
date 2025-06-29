@@ -108,7 +108,7 @@ if __name__=="__main__":
     config.system.nspins = (4, 0)
     config.system.flux = 9
     config.system.tau = 0.0001
-    config.system.interaction_strength = 6.0
+    config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     # config.optim.iterations = 20000
     config.batch_size = 128
