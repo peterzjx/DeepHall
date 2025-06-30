@@ -248,8 +248,8 @@ def weighted_local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
         print('weights in _e_l', weights.shape)
         potential = pe(data) * system.interaction_strength
         kinetic, angular_momenta = ke(params, data)
-        kinetic = kinetic * weights / jnp.sum(weights)
-        potential = potential * weights / jnp.sum(weights)
+        # kinetic = kinetic * weights
+        # potential = potential * weights
 
         # TODO: check if this is correct
         # angular_momenta = angular_momenta * weights / jnp.sum(weights)

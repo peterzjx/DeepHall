@@ -116,6 +116,10 @@ def dmc_train(cfg: Config):
             if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
                 renormal_interval = renormal_interval - 1
             assert renormal_interval>10
+            
+            
+            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+            state, stats = dmc_training_step(state, subkey)
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
@@ -124,12 +128,9 @@ def dmc_train(cfg: Config):
                 history_mean_energy=f"{mean_energy:.6f}",
                 weight_max=f"{jnp.max(walker_state.weights):.6f}",
                 weight_min=f"{jnp.min(walker_state.weights):.6f}",
-                weight_std=f"{jnp.std(walker_state.weights):.6f}"
+                weight_std=f"{jnp.std(walker_state.weights):.6f}",
             )
             
-            
-            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            state, stats = dmc_training_step(state, subkey)
             # writer.log(
             #     # step=str(step),
             #     # pmove=f"{pmove[0]:.2f}",

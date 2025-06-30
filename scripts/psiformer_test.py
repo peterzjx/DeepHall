@@ -21,7 +21,7 @@ for Ne in [4]:
         config.optim.iterations  = 13000
         config.batch_size = 6
         config.mcmc.width = 0.5
-        # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
+        config.log.pretrained_path = f"../logs/psiformer_4_kappa_1.0_dmc/ckpt_000999.npz"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"
         config.log.save_path = f"../logs/psiformer_{Ne}_kappa_{kappa}"
         train(config)

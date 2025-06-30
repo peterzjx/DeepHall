@@ -131,7 +131,7 @@ def make_dmc_loss_fn(
     def loss_and_grad(params: ArrayTree, data_and_weights: tuple[jnp.ndarray, jnp.ndarray]):
         data, weights = data_and_weights
         el, other_observables = batch_weighted_local_energy(params, data_and_weights)
-        el = el * weights / jnp.sum(weights)
+        # el = el * weights / jnp.sum(weights)
         # TODO: check if this is correct
         # other_observables = other_observables * weights / jnp.sum(weights)
         pmean_observables = cast(
