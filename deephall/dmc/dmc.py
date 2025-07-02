@@ -250,7 +250,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     # print('next dmc_mean E:', next_walker_state.dmc_mean_energy)
     # print(acceptance_threshold)
     # TODO: wrap the output into a debug_info object
-    return next_walker_state, key, num_accepted, acceptance_threshold, accepted_idx, walker_state, xy_move, move, log_green_function_forward, log_green_function_backward
+    return next_walker_state, key, num_accepted
 
 
 def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
@@ -271,22 +271,21 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
         """
         
         def step_fn(i, t):
-            walker_state, key, num_accepts, acceptance_threshold, accepted_idx, old_walker_state, xy_move, move, log_green_function_forward, log_green_function_backward = t
+            walker_state, key, num_accepts = t
             return dmc_update(key, params, system, network, walker_state, num_accepts, tau=system.kappa_tau)
         
         # TODO: fix local energy to a meaningful value
-        
-        walker_state, key, num_accepts, acceptance_threshold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward = lax.fori_loop(
-            0, steps, step_fn, (init_walker_state, key, 0, 
-                                jnp.ones_like(init_walker_state.lnpsi), jnp.ones_like(init_walker_state.lnpsi, dtype=bool), 
-                                init_walker_state, 
-                                jnp.zeros_like(init_walker_state.electrons),jnp.zeros_like(init_walker_state.electrons),
-                                jnp.zeros_like(init_walker_state.lnpsi),jnp.zeros_like(init_walker_state.lnpsi))  # (walker_state, key, num_accepts)
+        walker_state, key, num_accepts= lax.fori_loop(
+            0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
         )
+        # walker_state, key, num_accepts = lax.fori_loop(
+        #     0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
+        # )
         print('in dmc_step / step_fn')
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)
-        return walker_state, pmove, acceptance_threshold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward
+        # return walker_state, pmove
+        return walker_state, pmove
     
     return dmc_step
 

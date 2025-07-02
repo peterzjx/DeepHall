@@ -161,14 +161,11 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
 #         local_energy=energy,
 #         weights=walker_state.weights
 #     )
+
+@jax.jit
 def weighted_mean_energy(walker_state: WalkerState):
     weighted_energy = jnp.sum(walker_state.weights * walker_state.local_energy) / jnp.sum(walker_state.weights)
     return weighted_energy
-import jax
-import jax.numpy as jnp
-
-import jax
-import jax.numpy as jnp
 
 def renormalize_weight(
     W: jnp.ndarray,
@@ -273,7 +270,7 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
     dmc_mean_energy_new = walker_state.dmc_mean_energy
     renormalized = False
     if step % reweight_interval != 0 and step % update_interval != 0:
-        return walker_state, changed, idx_min, conditioned, change_shape
+        return walker_state
 
     if step % update_interval == 0:
         if use_external_energy:
@@ -323,99 +320,19 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
             d_metric=walker_state.d_metric,
             dmc_run_step=walker_state.dmc_run_step
         )
-    return walker_state, changed, idx_min, conditioned, change_shape
+    return walker_state
 
-def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
-    new_hist = jnp.array([weighted_mean_energy(walker_state=walker_state)])
-    if energy_hist == None:
-        energy_hist = new_hist
-    else:
-        energy_hist = jnp.concatenate([energy_hist, new_hist], axis=0)
-        if energy_hist.shape[0]>max_length:
-            new_len = new_hist.shape[0]
-            energy_hist = energy_hist[new_len:]
-    mean_energy = jnp.mean(energy_hist)
-    return energy_hist, mean_energy
-        
-# def sample_test(cfg: Config):
-#     init_logging()
-#     log_manager = LogManager(cfg)
-#     model = make_network(cfg.system, cfg.network)
-#     network = cast(LogPsiNetwork, model.apply)
-#     pmap_mcmc_step, pmoves = setup_mcmc(cfg, network)
-#     opt_init, training_step = optimizers.make_optimizer_step(cfg, network)
-
-#     key = jax.random.PRNGKey(cfg.seed)
-#     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
-
-#     # if cfg.log.pretrained_path is not None:
-#     #     initial_step, (params, data, opt_state, mcmc_width) = (
-#     #         initalize_state(cfg, model)
-#     #     )
-#     #     _, (params, _, opt_state, _) = (
-#     #         log_manager.try_load_pretrained_checkpoint()
-#     #     )
-#     # else:
-#     #     initial_step, (params, data, opt_state, mcmc_width) = (
-#     #         log_manager.try_restore_checkpoint() or initalize_state(cfg, model)
-#     #     )
-
-#     # TODO: load pretrained model from vmc checkpoint
-
-#     initial_step, (params, walker_state, opt_state) = (
-#         initalize_state(cfg, model)
-#     )
-#     # NOTE: walker state after this step only contains electron coordinates and weights
+# def accumulate_energy(walker_state: WalkerState, energy_hist: jnp.ndarray, max_length: int):
     
-#     walker_state = update_walker_state_from_pretrained(cfg, model, params, walker_state)
-#     # updated velocity, local energy, psi
-
-#     if (
-#         cfg.optim.optimizer == OptimizerName.none
-#         and cfg.log.restore_path is not None
-#         and cfg.log.restore_path != cfg.log.save_path
-#     ):  # Reset steps because inference run is another run
-#         initial_step = 0
-
-#     if opt_state is None:
-#         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-#         opt_state = opt_init(params, subkey, walker_state.electrons)
-
-#     logger.info("Start VMC with %s JAX devices", jax.device_count())
-
-#     if initial_step == 0:
-#         print('walker_state', walker_state)
-#         for _ in range(cfg.mcmc.burn_in):
-#             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-#             walker_state, pmove = pmap_mcmc_step(params, walker_state, subkey)
-#         logger.info("Burn in MCMC complete")
-#         if cfg.log.initial_energy:
-#             # Logging inital energy is helpful for debugging. If we have initial energy
-#             # but have error in training, it's probably optimizer's fault
-#             initial_stats, _ = constants.pmap(
-#                 make_loss_fn(network, cfg.system, LossMode.ENERGY_DIFF)
-#             )(params, walker_state)
-#             logger.info("Initial energy: %s", initial_stats["energy"][0].real)
-
-
-# def cli(argv: list[str] | None = None) -> None:
-#     parser = ArgumentParser(
-#         prog="deephall",
-#         description="Simulating the fractional quantum Hall effect (FQHE) with "
-#         "neural network variational Monte Carlo.",
-#     )
-#     parser.add_argument(
-#         "dotlist", help="path.to.key=value pairs for configuration", nargs="*"
-#     )
-#     parser.add_argument("--yml", help="config YML file to merge")
-#     args = parser.parse_args(argv or sys.argv[1:] or ["--help"])
-
-#     config = OmegaConf.structured(Config)
-#     if args.yml:
-#         config = OmegaConf.merge(config, OmegaConf.load(args.yml))
-#     config = OmegaConf.merge(config, OmegaConf.from_dotlist(args.dotlist))
-#     sample_test(Config.from_dict(config))
-
-
-# if __name__ == "__main__":
-#     cli()
+#     new_hist = jnp.array([weighted_mean_energy(walker_state=walker_state)])
+    
+#     if energy_hist == None:
+#         energy_hist = new_hist
+#     else:
+#         energy_hist = jnp.concatenate([energy_hist, new_hist], axis=0)
+#         if energy_hist.shape[0]>max_length:
+#             new_len = new_hist.shape[0]
+#             energy_hist = energy_hist[new_len:]
+    
+#     mean_energy = jnp.mean(energy_hist)
+#     return energy_hist, mean_energy
