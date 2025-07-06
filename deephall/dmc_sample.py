@@ -262,10 +262,6 @@ def renormalize_weight(
 
 
 def update_mean_energy(walker_state: WalkerState, step: int, update_interval: int, reweight_interval: int=10, use_external_energy: bool=False, external_energy: float=0.0):
-    changed = 0
-    idx_min = None
-    conditioned = None
-    change_shape = walker_state.weights.shape
     pmap_renormalize_weight = constants.pmap(renormalize_weight)
     dmc_mean_energy_new = walker_state.dmc_mean_energy
     renormalized = False

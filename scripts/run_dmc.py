@@ -66,11 +66,38 @@ def run_dmc(simple_config: Config):
     energy_history = jnp.ones(1000)*simple_config.initial_energy
     
     start = time.time()
+###########################################################
+    # def burnin_body(step, carry):
+    #     sharded_key, walker_state, energy_history = carry
+    #     sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+    #     walker_state, pmove = pmap_mcmc_step(params, walker_state, subkey)
+    #     local_mean_energy = dmc_sample.weighted_mean_energy(walker_state=walker_state)
+    #     energy_history = energy_history.at[step % energy_history.shape[0]].set(local_mean_energy)
+    #     walker_state = dmc_sample.update_mean_energy(
+    #         walker_state=walker_state,
+    #         step=step,
+    #         update_interval=5000,
+    #         use_external_energy=True,
+    #         external_energy=local_mean_energy
+    #     )
+    #     return (sharded_key, walker_state, energy_history)
+
+    # # Prepare initial carry
+    # init_carry = (sharded_key, walker_state, energy_history)
+
+    # # Run burn-in loop
+    # sharded_key, walker_state, energy_history = jax.lax.fori_loop(
+    #     0,
+    #     simple_config.mcmc.burn_in,
+    #     burnin_body,
+    #     init_carry
+    # )
+
+###########################################################
     for step in range(simple_config.mcmc.burn_in):
         print("Step burn in ", step)
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         walker_state, pmove = pmap_mcmc_step(params, walker_state, subkey)
-        
         local_mean_energy = dmc_sample.weighted_mean_energy(walker_state=walker_state)
         energy_history.at[step % len(energy_history)].set(local_mean_energy)
         walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=local_mean_energy)
@@ -79,29 +106,33 @@ def run_dmc(simple_config: Config):
     elapsed = end - start
     print(f"Elapsed time: {elapsed:.6f} seconds")
 
-    # with log_manager.create_writer() as writer:
-    #     renormal_interval = 100
-    #     energy_update_interval = 1000
-    #     for step in range(simple_config.mcmc.iteration):
-    #         print("Step ", step)
-    #         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-    #         walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(params, walker_state, subkey)
-    #         energy_history, mean_energy = dmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
-    #         walker_state, changed, idx_min, conditioned, change_shape = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
-    #         writer.log(
-    #             step=str(step),
-    #             pmove=f"{pmove[0]:.2f}",
-    #             local_energy=f"{dmc_sample.weighted_mean_energy(walker_state):.6f}",
-    #             dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.6f}",
-    #             history_mean_energy=f"{mean_energy:.6f}",
-    #             weight_max=f"{jnp.max(walker_state.weights):.6f}",
-    #             weight_min=f"{jnp.min(walker_state.weights):.6f}",
-    #             weight_std=f"{jnp.std(walker_state.weights):.6f}"
-    #         )
-    #         if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
-    #             renormal_interval = renormal_interval - 1
-    #         assert renormal_interval>10
+    with log_manager.create_writer() as writer:
+        renormal_interval = 100
+        energy_update_interval = 1000
+        for step in range(simple_config.mcmc.iteration):
+            print("Step ", step)
+            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+            walker_state, pmove  = pmap_mcmc_step(params, walker_state, subkey)
+            local_mean_energy = dmc_sample.weighted_mean_energy(walker_state=walker_state)       
+            energy_history.at[step % len(energy_history)].set(local_mean_energy)
+            hist_mean_energy = jnp.mean(energy_history)
+            walker_state = dmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=local_mean_energy)
+            writer.log(
+                step=str(step),
+                pmove=f"{pmove[0]:.2f}",
+                local_energy=f"{local_mean_energy:.6f}",
+                dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.6f}",
+                history_mean_energy=f"{hist_mean_energy:.6f}",
+                weight_max=f"{jnp.max(walker_state.weights):.6f}",
+                weight_min=f"{jnp.min(walker_state.weights):.6f}",
+                weight_std=f"{jnp.std(walker_state.weights):.6f}" 
+            )
+            if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
+                renormal_interval = renormal_interval - 1
+            assert renormal_interval>=10
 if __name__=="__main__":
+    Ne = 4
+    dmc_iteration = 6000
     config = Config(network=Network(
             type=NetworkType.laughlin
             # type=NetworkType.parton,
@@ -111,25 +142,27 @@ if __name__=="__main__":
             # )
         ))
     config.seed = 126
-    config.system.nspins = (4, 0)
-    config.system.flux = 9
+    config.system.nspins = (Ne, 0)
+    config.system.flux = 2 * Ne + 1
     config.system.tau = 0.0001
-    config.system.interaction_strength = 1.0
+    config.system.interaction_strength = 4.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     # config.optim.iterations = 20000
-    config.batch_size = 64
+    config.batch_size = 32
     config.mcmc.width = 0.3
     config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
 
-    # config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_009978.npz"
+    # config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_097163.npz"
     # config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
     # config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_000519.npz"
     # config.log.save_path = "../logs/psiformer_4_kappa_1.0_dmc"
-    # config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
+    config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
     config.log.save_path = f"../logs/laughlin_4_kappa_{config.system.interaction_strength}_dmc"
-
+    # config.log.pretrained_path = f"../logs/psiformer25_{Ne}_kappa_1.0_dmc/ckpt_00{dmc_iteration-1}.npz"
+    # config.log.save_path = f"../logs/psiformer25_{Ne}_kappa_1.0_dmc/dmc_run/"
+    
     config.mcmc.use_dmc = True
     config.mcmc.burn_in = 100
-    config.mcmc.iteration = 50000
+    config.mcmc.iteration = 10000
 
     run_dmc(config)

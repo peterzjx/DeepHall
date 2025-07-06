@@ -229,9 +229,6 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     # move = jnp.where(accepted_idx[..., None, None], move, jnp.zeros_like(move))
     move = trial_electrons - walker_state.electrons
     xy_move = jnp.where(accepted_idx[..., None, None], xy_move, jnp.zeros_like(move))
- 
-    
-    # total_mean_energy = walker_state.dmc_mean_energy
 
     next_walker_weights = reweight_walkers(walker_state.weights, walker_state.local_energy, next_local_energy, system.kappa_tau, walker_state.dmc_mean_energy)
     # next_walker_weights = walker_state.weights #without reweighting, it is identical to VMC TODO: verify that it resembles VMC
@@ -278,13 +275,8 @@ def make_dmc_step(system: System, network: LogPsiNetwork, batch_per_device: int,
         walker_state, key, num_accepts= lax.fori_loop(
             0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
         )
-        # walker_state, key, num_accepts = lax.fori_loop(
-        #     0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
-        # )
-        print('in dmc_step / step_fn')
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)
-        # return walker_state, pmove
         return walker_state, pmove
     
     return dmc_step
