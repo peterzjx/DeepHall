@@ -12,7 +12,7 @@ for Ne in [4]:
             type=NetworkType.parton,
             parton=PartonNetwork(
                 fermionic_type=FermionicType.pfaffian,
-                flux_type=FluxType.symmetric_mlp_network
+                flux_type=FluxType.product
             )
         ))
         config.system.interaction_strength = kappa
