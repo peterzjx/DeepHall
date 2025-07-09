@@ -220,15 +220,15 @@ class Parton(nn.Module):
         return cusp_element
 
     def flux_attachment(self, electrons, mask_len=0.1, truncate=False):
-        if self.flux_type == FluxType.product:
-            return self.flux_product(electrons, mask_len, truncate)
+        if self.flux_type == FluxType.original_jastrow:
+            return self.flux_original_jastrow(electrons, mask_len, truncate)
         elif self.flux_type in [FluxType.symmetric_mlp_network, FluxType.symmetric_att_network]:
             return self.flux_symmetric_network(electrons)
         else:
             raise ValueError(f"Invalid flux type: {self.flux_type}")
 
 
-    def flux_product(self, electrons, mask_len=0.1, truncate=False):
+    def flux_original_jastrow(self, electrons, mask_len=0.1, truncate=False):
         """
             electrons: [..., N, 2]
         """

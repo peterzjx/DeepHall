@@ -53,7 +53,7 @@ class InteractionType(StrEnum):
     harmonic = "harmonic"
 
 class FluxType(StrEnum):
-    product = "product"
+    original_jastrow = "original_jastrow"
     symmetric_mlp_network = "symmetric_mlp_network"
     symmetric_att_network = "symmetric_att_network"
 
