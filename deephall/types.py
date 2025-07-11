@@ -17,7 +17,6 @@ from typing import NamedTuple, Protocol, TypedDict
 from chex import ArrayTree, PRNGKey
 from jax import numpy as jnp
 from optax import OptState
-# from deephall.dmc.dmc import WalkerState
 
 class WalkerState(NamedTuple):
     electrons: jnp.ndarray = jnp.array([])

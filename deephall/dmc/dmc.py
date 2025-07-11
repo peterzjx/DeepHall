@@ -209,7 +209,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
     
     next_lnpsi = v_utils.batch_log_psi(params, model, trial_electrons)
     next_v = v_utils.batch_drift_velocity(params, model, trial_electrons)
-    next_d = v_utils.calculate_d_metric_xy(trial_electrons_xy)
+    next_d = v_utils.calculate_d_metric_xy(trial_electrons_xy, _2Q=system.flux)
 
     # accepted_idx, acceptance_threshold, log_green_function_forward, log_green_function_backward= calculate_acceptance(key_accept, walker_state.electrons,trial_electrons, walker_state.lnpsi, next_lnpsi, walker_state.v, next_v, walker_state.d_metric, next_d, tau)
     accepted_idx, acceptance_threshold, log_green_function_forward, log_green_function_backward= calculate_acceptance_xy(key_accept, walker_state.electrons_xy, trial_electrons_xy, walker_state.lnpsi, next_lnpsi, walker_state.v, next_v, walker_state.d_metric, next_d, tau)

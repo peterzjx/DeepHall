@@ -12,18 +12,19 @@ for Ne in [4]:
             type=NetworkType.parton,
             parton=PartonNetwork(
                 fermionic_type=FermionicType.pfaffian,
-                flux_type=FluxType.symmetric_att_network
+                flux_type=FluxType.original_jastrow
             )
         ))
         config.system.interaction_strength = kappa
         config.system.nspins = (Ne, 0)
         config.system.flux = 2*Ne+1
-        config.optim.iterations  = 100000
+        config.optim.iterations  = 800
         config.batch_size = 128
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
         # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"
-        config.log.save_path = f"../logs/{timestamp}_pfaf_{Ne}_kappa_{kappa}"
+        # config.log.save_path = f"../logs/{timestamp}_pfaf_{Ne}_kappa_{kappa}"
+        config.log.save_path = f"../logs/pfaf_{Ne}_kappa_{kappa}"
         train(config)
 
         # config = Config(network=Network(type=NetworkType.psiformer))

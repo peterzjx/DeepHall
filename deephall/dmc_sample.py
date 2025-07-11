@@ -69,7 +69,7 @@ def initalize_state(cfg: Config, model: nn.Module):
     print('init shape', coords.shape, v_0.shape, logpsi_0.shape)
     print('device #', jax.devices(), jax.device_count())
 
-    d_0 = v_utils.calculate_d_metric(coords)
+    d_0 = v_utils.calculate_d_metric(coords, _2Q=cfg.system.flux)
     
     # Create walker state before replication
     

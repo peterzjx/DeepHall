@@ -150,36 +150,36 @@ if __name__=="__main__":
     Ne = 4
     dmc_iteration = 6000
     config = Config(network=Network(
-            type=NetworkType.laughlin
-            # type=NetworkType.parton,
-            # parton=PartonNetwork(
-            #     fermionic_type=FermionicType.pfaffian,
-            #     flux_type=FluxType.symmetric_mlp_network
-            # )
+            # type=NetworkType.laughlin
+            type=NetworkType.parton,
+            parton=PartonNetwork(
+                fermionic_type=FermionicType.pfaffian,
+                flux_type=FluxType.original_jastrow
+            )
         ))
     config.seed = 126
     config.system.nspins = (Ne, 0)
     config.system.flux = 2 * Ne + 1
-    config.system.tau = 0.0001
+    config.system.tau = 0.0005
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     # config.optim.iterations = 20000
-    config.batch_size = 32
+    config.batch_size = 16
     config.mcmc.width = 0.3
     config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
 
-    # config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_097163.npz"
-    # config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
+    config.log.pretrained_path = "../logs/pfaf_4_kappa_1.0/ckpt_000499.npz"
+    config.log.save_path = "../logs/pfaf_4_kappa_1.0_dmc"
     # config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_000519.npz"
     # config.log.save_path = "../logs/psiformer_4_kappa_1.0_dmc"
-    config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
-    config.log.save_path = f"../logs/laughlin_4_kappa_{config.system.interaction_strength}_dmc"
+    # config.log.pretrained_path = "../logs/laughlin_4_kappa_1.0/ckpt_003884.npz"
+    # config.log.save_path = f"../logs/laughlin_4_kappa_{config.system.interaction_strength}_dmc"
     # config.log.pretrained_path = f"../logs/psiformer25_{Ne}_kappa_1.0_dmc/ckpt_00{dmc_iteration-1}.npz"
     # config.log.save_path = f"../logs/psiformer25_{Ne}_kappa_1.0_dmc/dmc_run/"
     
     config.mcmc.use_dmc = True
-    config.mcmc.burn_in = 100
-    config.mcmc.iteration = 1000
+    config.mcmc.burn_in = 1000
+    config.mcmc.iteration = 10000
 
     # Create profiling directory
     import os
@@ -187,5 +187,5 @@ if __name__=="__main__":
     os.makedirs(profile_dir, exist_ok=True)
     
     # Run with JAX profiler trace
-    with trace(profile_dir, create_perfetto_link=False, create_perfetto_trace=True):
+    with trace(profile_dir, create_perfetto_link=False, create_perfetto_trace=False):
         run_dmc(config)

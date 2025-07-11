@@ -260,6 +260,16 @@ class Parton(nn.Module):
         '''
             electrons: [..., N, 2]
         '''
-        flux = self.symmetric_network(electrons)
-        flux = flux[..., 0] + 1j * flux[..., 1]
-        return flux
+        flux0 = self.flux_original_jastrow(electrons)
+
+        flux1 = self.symmetric_network(electrons)
+        flux1 = flux1[..., 0] + 1j * flux1[..., 1]
+
+        # theta, phi = electrons[..., 0], electrons[..., 1]  # [..., N], [..., N]
+        # Ne = theta.shape[-1]
+        # south_pole = jnp.cos(theta/2)
+        # south_pole = jnp.prod(south_pole, axis = -1)
+        # north_pole = jnp.sin(theta/2)
+        # north_pole = jnp.prod(north_pole, axis = -1)
+        # flux = flux * south_pole * north_pole
+        return flux0 + flux1
