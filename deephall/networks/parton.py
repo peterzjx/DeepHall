@@ -6,7 +6,7 @@ from jax import numpy as jnp
 from deephall.config import OrbitalType, FluxType, FermionicType
 
 from .blocks import Orbitals
-from .bosonic_network import SymmetricAttNetwork, SymmetricMLPNetwork
+from .bosonic_network import SymmetricAttNetwork, SymmetricProductAttNetwork, SymmetricProductMLPNetwork, SymmetricMLPNetwork
 
 
 
@@ -146,6 +146,10 @@ class Parton(nn.Module):
             self.symmetric_network = SymmetricMLPNetwork()
         elif self.flux_type == FluxType.symmetric_att_network:
             self.symmetric_network = SymmetricAttNetwork()
+        elif self.flux_type == FluxType.symmetric_product_mlp_network:
+            self.symmetric_network = SymmetricProductMLPNetwork()
+        elif self.flux_type == FluxType.symmetric_product_att_network:
+            self.symmetric_network = SymmetricProductAttNetwork()
 
     def _get_fermionic_part_pfaffian(self, electrons):
         """
@@ -222,7 +226,7 @@ class Parton(nn.Module):
     def flux_attachment(self, electrons, mask_len=0.1, truncate=False):
         if self.flux_type == FluxType.original_jastrow:
             return self.flux_original_jastrow(electrons, mask_len, truncate)
-        elif self.flux_type in [FluxType.symmetric_mlp_network, FluxType.symmetric_att_network]:
+        elif self.flux_type in [FluxType.symmetric_mlp_network, FluxType.symmetric_att_network, FluxType.symmetric_product_mlp_network, FluxType.symmetric_product_att_network]:
             return self.flux_symmetric_network(electrons)
         else:
             raise ValueError(f"Invalid flux type: {self.flux_type}")
@@ -260,16 +264,18 @@ class Parton(nn.Module):
         '''
             electrons: [..., N, 2]
         '''
-        flux0 = self.flux_original_jastrow(electrons)
+        flux = self.symmetric_network(electrons)
+        # flux = flux[..., 0] + 1j * flux[..., 1]
+        Ne = electrons.shape[-2]
+        Q_eff = (Ne - 1) / 2
 
-        flux1 = self.symmetric_network(electrons)
-        flux1 = flux1[..., 0] + 1j * flux1[..., 1]
+        theta, phi = electrons[..., 0], electrons[..., 1]  # [..., N], [..., N]
+        
+        north_pole = jnp.exp( 1j * Q_eff * phi) * jnp.exp(- theta**2 / 0.01) + (1-jnp.exp(-theta**2/0.01))
+        north_pole = jnp.prod(north_pole, axis = -1)
 
-        # theta, phi = electrons[..., 0], electrons[..., 1]  # [..., N], [..., N]
-        # Ne = theta.shape[-1]
-        # south_pole = jnp.cos(theta/2)
-        # south_pole = jnp.prod(south_pole, axis = -1)
-        # north_pole = jnp.sin(theta/2)
-        # north_pole = jnp.prod(north_pole, axis = -1)
-        # flux = flux * south_pole * north_pole
-        return flux0 + flux1
+        south_pole = jnp.exp( - 1j * Q_eff * phi) * jnp.exp(- (theta-jnp.pi)**2 / 0.01) + (1-jnp.exp(-(theta-jnp.pi)**2/0.01))
+        south_pole = jnp.prod(south_pole, axis = -1)
+        
+        flux = flux * south_pole * north_pole
+        return flux

@@ -22,7 +22,23 @@ import logging
 import jax.numpy as jnp
 import time
 
-
+def count_param_bytes(params):
+    """Recursively count total parameter size in bytes."""
+    total = 0
+    def _count(pytree):
+        nonlocal total
+        if isinstance(pytree, dict):
+            for v in pytree.values():
+                _count(v)
+        elif isinstance(pytree, (list, tuple)):
+            for v in pytree:
+                _count(v)
+        elif isinstance(pytree, jax.Array):
+            total += pytree.size * pytree.dtype.itemsize
+        elif isinstance(pytree, np.ndarray):
+            total += pytree.size * pytree.dtype.itemsize
+    _count(params)
+    return total
 
 def run_dmc(simple_config: Config):
     # TODO: load from pretrained vmc checkpoint
@@ -63,7 +79,9 @@ def run_dmc(simple_config: Config):
         )
         walker_state = get_walker_state(state)
         params = state.params
-        print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
+        total_bytes = count_param_bytes(params)
+        print(f"Model size: {total_bytes / (1024**2):.2f} MB")
+        # print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
         key = jax.random.PRNGKey(simple_config.seed)
         sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
         energy_history = jnp.ones(1000)*simple_config.initial_energy
@@ -164,7 +182,7 @@ if __name__=="__main__":
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
     # config.optim.iterations = 20000
-    config.batch_size = 16
+    config.batch_size = 32
     config.mcmc.width = 0.3
     config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
 
@@ -178,8 +196,8 @@ if __name__=="__main__":
     # config.log.save_path = f"../logs/psiformer25_{Ne}_kappa_1.0_dmc/dmc_run/"
     
     config.mcmc.use_dmc = True
-    config.mcmc.burn_in = 1000
-    config.mcmc.iteration = 10000
+    config.mcmc.burn_in = 10
+    config.mcmc.iteration = 20
 
     # Create profiling directory
     import os

@@ -55,7 +55,9 @@ class InteractionType(StrEnum):
 class FluxType(StrEnum):
     original_jastrow = "original_jastrow"
     symmetric_mlp_network = "symmetric_mlp_network"
+    symmetric_product_mlp_network = "symmetric_product_mlp_network"
     symmetric_att_network = "symmetric_att_network"
+    symmetric_product_att_network = "symmetric_product_att_network"
 
 @dataclass
 class System:

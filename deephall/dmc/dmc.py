@@ -9,6 +9,18 @@ import deephall.dmc.velocity_utils as v_utils
 from deephall import constants
 from deephall.types import WalkerState, LogPsiNetwork
 from deephall.config import Config, System
+########################################################################################
+# import os
+# import subprocess
+
+# def print_gpu_memory():
+#     result = subprocess.run(
+#         ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,nounits,noheader"],
+#         stdout=subprocess.PIPE,
+#         text=True
+#     )
+#     print(f"[MEM] GPU Memory Used: {result.stdout.strip()} MB")
+# ########################################################################################
 
 _Z_MAX = 1e9
 _Z_MIN = 1e-9
@@ -183,6 +195,7 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
         walker_state: current walker state
         tau: time step
     '''
+    # print_gpu_memory()
     key, key_move, key_accept = jax.random.split(key, 3)
 
     theta = walker_state.electrons[..., 0]
@@ -208,6 +221,11 @@ def dmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNet
 
     
     next_lnpsi = v_utils.batch_log_psi(params, model, trial_electrons)
+    print("[CHECK] After forward pass:")
+    
+    jax.block_until_ready(next_lnpsi)
+    # print_gpu_memory()
+    
     next_v = v_utils.batch_drift_velocity(params, model, trial_electrons)
     next_d = v_utils.calculate_d_metric_xy(trial_electrons_xy, _2Q=system.flux)
 
