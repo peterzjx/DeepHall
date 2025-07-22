@@ -172,6 +172,7 @@ class OptimizerName(StrEnum):
 @dataclass
 class OptimizerAdam:
     lr: LearningRate = field(default_factory=LearningRate)
+    gradient_accumulation_steps: int = 1
 
 
 @dataclass
@@ -234,6 +235,7 @@ class Log:
 @dataclass
 class Config:
     batch_size: int = 3360  # 32*3*5*7
+    num_accumulated_batches: int = 1
     seed: int = field(default_factory=lambda: int(time.time()))
     system: System = field(default_factory=System)
     network: Network = field(default_factory=Network)

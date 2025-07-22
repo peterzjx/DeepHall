@@ -22,9 +22,11 @@ if __name__ == "__main__":
             config.system.interaction_strength = kappa
             config.system.nspins = (Ne, 0)
             config.system.flux = 2*Ne+1
-            # config.optim.optimizer = OptimizerName.kfac
-            config.optim.iterations  = 20000
+            config.optim.optimizer = OptimizerName.adam
+            config.optim.adam.gradient_accumulation_steps = 4
+            config.optim.iterations = 20000
             config.batch_size = batch_size
+            # config.num_accumulated_batches = 1
             config.mcmc.width = 0.5 
             # config.log.pretrained_path = f"20250418221957_pfaffian_4_kappa_0.5"
             # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"

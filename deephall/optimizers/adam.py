@@ -14,17 +14,24 @@
 
 import optax
 from chex import PRNGKey
+import logging
+import jax
 
 from deephall import constants
 from deephall.config import OptimizerAdam
 from deephall.log import CheckpointState
 from deephall.types import TrainingInit, TrainingStep
 
+logger = logging.getLogger(__name__)
+
 
 def make_adam_training_step(
     optim_cfg: OptimizerAdam, loss_grad_fn
 ) -> tuple[TrainingInit, TrainingStep]:
     tx = optax.adam(learning_rate=optim_cfg.lr.schedule)
+    gradient_accumulation_steps = optim_cfg.gradient_accumulation_steps
+    tx = optax.MultiSteps(tx, gradient_accumulation_steps)
+
 
     @constants.pmap
     def init(params, key, data):
@@ -36,7 +43,16 @@ def make_adam_training_step(
         del key
         params, data, opt_state, mcmc_width = state
         stats, grads = loss_grad_fn(params, data)
-        updates, opt_state = tx.update(grads, opt_state)
+        updates, opt_state = tx.update(grads, opt_state, params)
+        
+        # Check if this step actually applied updates (not just accumulated gradients)
+        has_updated = tx.has_updated(opt_state)
+        
+        # Use JAX's debug.print for logging within JAX functions
+        import jax.debug
+        jax.debug.print("MultiSteps: has_updated={}, gradient_step={}, mini_step={}", 
+                       has_updated, opt_state.gradient_step, opt_state.mini_step)
+        
         params = optax.apply_updates(params, updates)
         return (CheckpointState(params, data, opt_state, mcmc_width), stats)
 
