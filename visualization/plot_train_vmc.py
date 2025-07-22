@@ -3,6 +3,8 @@ import numpy as np
 import sys
 import matplotlib.pyplot as plt
 import matplotlib
+import re
+
 matplotlib.use('TkAgg')
 rolling_window = 20
 def DumpLarge(y, cutoff=100):
@@ -20,8 +22,13 @@ def DumpLarge(y, cutoff=100):
 
     return y_p
 
-
-for file_name in sys.argv[1:]:
+colors = ['red', 'blue', 'orange', 'green', 'black', 'gray', 'teal', 'purple']
+batch_sizes= []
+energys = []
+std_energys = []
+for idx, file_name in enumerate(sys.argv[1:]):
+    
+    
     df = pd.read_csv(file_name)
     x0 = df["step"]
     x0 = range(len(x0))
@@ -32,23 +39,17 @@ for file_name in sys.argv[1:]:
     y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
     y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
-    # plt.plot(x0, y1, '.-')
-    # plt.plot(x0, y2, '--')
-    plt.plot(x0, y0_smoothed, 'o-', label=file_name,  color='red')
-    plt.legend()
-    print(np.mean(y0_smoothed[-100:]))
-# df = pd.read_csv(sys.argv[2])
-# x1 = df["step"]
-# y1 = df["energy"]
-# y1_smoothed = y1.rolling(window=rolling_window, min_periods=1).mean()
-# y1_smoothed = DumpLarge(y1_smoothed)
-# y_err = df["variance"]
+    
+    # plt.plot(x0, y0_smoothed, '.-', label=file_name,  color=colors[idx])
+    # plt.ylim(3.9,4.5)
+    # plt.legend()
 
-# # Truncate y_err to have a maximum value of 100
-# y_err = np.clip(y_err, None, 10) 
-
-# plt.errorbar(x=x, y=y, yerr=y_err)
-
-# plt.plot(x1, y1_smoothed)
+    batch_size = int(re.findall(r'(\d+)', file_name)[-1])
+    energy = np.mean(y0_smoothed[-1000:])
+    std_energy = np.std(y0_smoothed[-1000:])
+    batch_sizes.append(batch_size)
+    energys.append(energy)
+    std_energys.append(std_energy)
+plt.errorbar(x=batch_sizes, y=energys, yerr=std_energys)
 plt.savefig("train.png")
 plt.show()
