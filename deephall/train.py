@@ -96,12 +96,23 @@ def train(cfg: Config):
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
 
-    if cfg.log.pretrained_path is not None:
+    if cfg.log.pretrained_path is not None: #TODO: need to clarify different cases, 1. start from nothing
+                                            #                                       2. restore from a checkpoint with original params.
+                                            #                                       3. restore from a checkpoint with changed optizer parameters
+                                            #                                       4. pretrain from a model but change system size (paired states)
+                                            #                                       
         initial_step, (params, data, opt_state, mcmc_width) = (
             initalize_state(cfg, model)
         )
         _, (params, _, opt_state, _) = (
             log_manager.try_load_pretrained_checkpoint()
+        )
+    elif cfg.log.restore_path is not None:
+        initial_step, (params, data, opt_state, mcmc_width) = (
+            initalize_state(cfg, model)
+        )
+        _, (params, _, _, _) = (
+            log_manager.try_restore_checkpoint()
         )
     else:
         initial_step, (params, data, opt_state, mcmc_width) = (

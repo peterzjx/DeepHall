@@ -22,7 +22,29 @@ from jax.numpy import cos, sin, tan
 
 from deephall.config import InteractionType, System
 from deephall.types import AngularMomenta, LocalEnergy, LogPsiNetwork, OtherObservables
+from deephall.vdmc import velocity_utils as v_utils
+from deephall.vdmc.velocity_utils import thetaphi_xy, calculate_d_metric, calculate_d_metric_xy
 
+######################################################################################
+def calculateVectPotential(_2Q: float, electron_xy: jnp.ndarray):
+    x = electron_xy[..., 0]
+    y = electron_xy[..., 1]
+    tmp = 1 + x**2 + y**2
+    Ax = _2Q / tmp * y
+    Ay = -_2Q / tmp * x
+    return jnp.stack([Ax, Ay], axis = -1)
+
+# def createNablaPhi(self, coord):
+#     batch_size = coord.size()[0]
+#     coord.requires_grad_(True)
+#     self.Phi = self.createPhi(coord)
+#     self.D_Phi = torch.zeros(batch_size, self.Ne, DIM)
+#     for iw in range(batch_size):
+#         grad = torch.autograd.grad(self.Phi[iw], (coord,), retain_graph=True)
+#         self.D_Phi[iw] = grad[0][iw]
+#     self.D_Phi = self.D_Phi.to(DEVICE)
+#     return self.D_Phi
+######################################################################################
 
 def coulomb_potential(cos12: jnp.ndarray, Q: float, r: jnp.ndarray) -> jnp.ndarray:
     """Returns the electron-electron Coulomb potential.
@@ -172,6 +194,52 @@ def make_local_kinetic_energy(f: LogPsiNetwork, Q: float, r: jnp.ndarray):
 
     return _lapl_over_f
 
+def make_local_kinetic_v_energy(f: LogPsiNetwork, Q: float, r: float):
+
+    # def thetaphi_xy(electron_thetaphi: jnp.ndarray):
+    #     theta = electron_thetaphi[..., 0]
+    #     phi = electron_thetaphi[..., 1]
+    #     x = jnp.cos(phi) / jnp.tan(theta / 2)
+    #     y = jnp.sin(phi) / jnp.tan(theta / 2)
+    #     electron_xy = jnp.stack([x, y], axis=-1)
+    #     return electron_xy
+    
+    def divergence(F):
+        def per_point_div(x_single):
+            # x_single: [2] (a single point)
+            def F_single(x):
+                # wrap F to work on a single point [1, 2]
+                return F(x[None, :])[0]  # get [2] vector
+
+            jac = jax.jacfwd(F_single)(x_single)  # shape [2, 2]
+            return jnp.trace(jac)  # scalar
+
+        # Vectorize over N points
+        return jax.vmap(per_point_div)
+    
+    def kinetic_F(params: ArrayTree, electron_thetaphi: jnp.ndarray):
+        """Compute divergence using autodiff (F_func is a JAX function)."""
+        electron_xy = thetaphi_xy(electron_thetaphi)
+        dmat = jnp.squeeze(calculate_d_metric_xy(electron_xy, 2 * Q))
+        
+        A = calculateVectPotential( 2 * Q, electron_xy=electron_xy)
+        A2 = jnp.sum(A * A, axis = -1)
+        F = f(params, electron_xy)
+        FF = jnp.sum(F * F, axis = -1)
+        AF = jnp.sum(A * F, axis = -1)
+
+        
+        paramed_model = lambda x: f(params, x)
+        grad = divergence(paramed_model)(electron_xy)
+        div_F = grad
+        pdt = 0.5 * dmat * (- div_F - FF - 2 * 1j * AF + A2)
+        
+        ke = jnp.sum(pdt, axis = -1)
+
+        return  ke, None
+    
+    
+    return lambda p, ele_theta: kinetic_F(p, thetaphi_xy(ele_theta))
 
 def local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
     """Creates the function to evaluate the local energy.
@@ -213,6 +281,45 @@ def local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
 
     return _e_l
 
+def local_v_energy(v_model: LogPsiNetwork, system: System) -> LocalEnergy:
+    """Creates the function to evaluate the local energy.
+
+    Args:
+        f: Callable which returns the sign and log of the magnitude of the
+            wavefunction given the network parameters and configurations data.
+        system: Config for system.
+
+    Returns:
+        Callable with signature e_l(params, key, data) which evaluates the local
+        energy of the wavefunction given the parameters params, RNG state key,
+        and a single MCMC configuration in data.
+    """
+    Q = system.flux / 2
+    radius = jnp.array(system.radius or jnp.sqrt(Q))
+    ke = make_local_kinetic_v_energy(v_model, Q, radius)
+    pe = make_potential(system.interaction_type, Q, radius)
+
+    def _e_l(
+        params: ArrayTree, data: jnp.ndarray
+    ) -> tuple[jnp.ndarray, OtherObservables]:
+        """Returns the total energy.
+
+        Args:
+            params: network parameters.
+            data: MCMC configuration.
+
+        Returns:
+            Local energy and other observables.
+        """
+        potential = pe(data) * system.interaction_strength
+        kinetic, _ = ke(params, data)
+        return kinetic + potential, {
+            "potential": potential,
+            "kinetic": kinetic,
+        }
+
+    return _e_l
+
 def weighted_local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
     """Creates the function to evaluate the local energy.
 
@@ -244,8 +351,6 @@ def weighted_local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
             Local energy and other observables.
         """
         data, weights = data_and_weights
-        print('data in _e_l', data.shape)
-        print('weights in _e_l', weights.shape)
         potential = pe(data) * system.interaction_strength
         kinetic, angular_momenta = ke(params, data)
         # kinetic = kinetic * weights

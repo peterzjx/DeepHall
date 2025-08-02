@@ -23,9 +23,12 @@ def DumpLarge(y, cutoff=100):
     return y_p
 
 colors = ['red', 'blue', 'orange', 'green', 'black', 'gray', 'teal', 'purple']
-batch_sizes= []
+batch_sizes = []
+mini_nums = []
 energys = []
 std_energys = []
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
 for idx, file_name in enumerate(sys.argv[1:]):
     
     
@@ -33,6 +36,8 @@ for idx, file_name in enumerate(sys.argv[1:]):
     x0 = df["step"]
     x0 = range(len(x0))
     y0 = df["energy"]
+    Ek = df['kinetic']
+    Ev = df['potential']
     # y1 = df["local_energy"]
     # y2 = df["dmc_mean_energy"]
     
@@ -40,16 +45,21 @@ for idx, file_name in enumerate(sys.argv[1:]):
     y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
     
-    # plt.plot(x0, y0_smoothed, '.-', label=file_name,  color=colors[idx])
+    axes[0].plot(x0, y0, '.-', label=file_name,  color=colors[idx])
+    axes[1].plot(x0, Ek, '.-', label=file_name,  color=colors[idx])
+    axes[2].plot(x0, Ev, '.-', label=file_name,  color=colors[idx])
     # plt.ylim(3.9,4.5)
-    # plt.legend()
+    plt.legend()
 
-    batch_size = int(re.findall(r'(\d+)', file_name)[-1])
+    batch_size = int(re.findall(r'_b(\d+)', file_name)[-1])
+    mini_num = int(re.findall(r'_mini(\d+)', file_name)[-1])
     energy = np.mean(y0_smoothed[-1000:])
     std_energy = np.std(y0_smoothed[-1000:])
     batch_sizes.append(batch_size)
+    mini_nums.append(mini_num)
     energys.append(energy)
     std_energys.append(std_energy)
-plt.errorbar(x=batch_sizes, y=energys, yerr=std_energys)
+# print(batch_sizes, mini_nums)
+# plt.errorbar(x=mini_nums, y=energys, yerr=std_energys)
 plt.savefig("train.png")
 plt.show()

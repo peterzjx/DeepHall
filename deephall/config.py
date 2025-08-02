@@ -90,6 +90,7 @@ class NetworkType(StrEnum):
     psiformer = "psiformer"
     laughlin = "laughlin"
     parton = "parton"
+    laughlin_v = "laughlin_v"
 
 
 class FermionicType(StrEnum):
@@ -126,6 +127,10 @@ class Network:
     orbital: OrbitalType = OrbitalType.full
     psiformer: PsiformerNetwork = field(default_factory=PsiformerNetwork)
     parton: PartonNetwork = field(default_factory=PartonNetwork)
+
+@dataclass
+class VNetwork:
+    type: NetworkType = NetworkType.laughlin_v
 
 
 @dataclass
