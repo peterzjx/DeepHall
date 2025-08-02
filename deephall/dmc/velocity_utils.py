@@ -18,14 +18,15 @@ def batch_drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons: jnp
     """
         electrons: [nwalkers, nelec, 2]
     """
-    theta = electrons[..., 0]
-    phi = electrons[..., 1]
-    x = jnp.cos(phi) / jnp.tan(theta / 2)
-    y = jnp.sin(phi) / jnp.tan(theta / 2)
-    electron_xy = jnp.stack([x, y], axis=-1)
+    # TODO: check why this is needed
+    # theta = electrons[..., 0]
+    # phi = electrons[..., 1]
+    # x = jnp.cos(phi) / jnp.tan(theta / 2)
+    # y = jnp.sin(phi) / jnp.tan(theta / 2)
+    # electron_xy = jnp.stack([x, y], axis=-1)
     drift_F = lambda x: model(params, x)
-    batch_grad_fn = jax.vmap(drift_F, in_axes=0)
-    drift_vxy = batch_grad_fn(electrons)  # [nwalkers, nelec, 2]
+    batch_drift_fn = jax.vmap(drift_F, in_axes=0)
+    drift_vxy = batch_drift_fn(electrons)  # [nwalkers, nelec, 2]
     return drift_vxy
 
 def batch_log_psi(params: ArrayTree, model: LogPsiNetwork, electrons: jnp.ndarray):

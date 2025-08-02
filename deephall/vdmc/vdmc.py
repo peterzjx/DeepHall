@@ -137,7 +137,7 @@ def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electr
     metric = jnp.prod(jnp.sin(theta), axis = -1)
     next_metric = jnp.prod(jnp.sin(next_theta), axis = -1)
     # acceptance_threshold = acceptance_threshold * next_metric / metric
-    acceptance_threshold = next_metric / metric
+    acceptance_threshold = 1.0 * next_metric / metric
     accepted_idx = jax.random.uniform(key, shape=acceptance_threshold.shape) < acceptance_threshold
     return accepted_idx, acceptance_threshold
 
@@ -159,6 +159,7 @@ def calculate_move_xy(key: PRNGKey, v: jnp.ndarray, d_metric: float, tau: float 
     return move
 
 def calculate_move_thetaphi(key: PRNGKey, theta_phi: jnp.ndarray, stddev: float = 0.03):
+    # TODO: check the metrics if sin theta is needed 
     move = (
         jax.random.normal(
             key=key,
@@ -199,7 +200,7 @@ def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
     next_d = v_utils.calculate_d_metric_xy(trial_electrons_xy, _2Q=system.flux)
 
     accepted_idx, acceptance_threshold = calculate_acceptance_xy(key_accept, walker_state.electrons_xy, trial_electrons_xy, walker_state.v, next_v, walker_state.d_metric, next_d)
-    start_step_idx = walker_state.dmc_run_step < 1 
+    start_step_idx = walker_state.dmc_run_step < 1 # TODO: just a small number
     accepted_idx = jnp.where(start_step_idx, jnp.ones_like(walker_state.lnpsi, dtype=bool), accepted_idx)
     # acceptance_threshold = jnp.ones_like(walker_state.lnpsi)
     num_accepted += jnp.sum(accepted_idx)
@@ -221,9 +222,9 @@ def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
         electrons_xy=next_electrons_xy,
         v=next_v,
         d_metric=next_d,
-        lnpsi=walker_state.lnpsi, #dummy not updating
+        lnpsi=jnp.zeros_like(walker_state.lnpsi), # dummy not updating
         local_energy=next_local_energy,
-        weights=walker_state.weights, #dummy not updating
+        weights=jnp.ones_like(walker_state.weights), # dummy not updating
         dmc_mean_energy=walker_state.dmc_mean_energy,
         dmc_run_step=walker_state.dmc_run_step+1
     )
