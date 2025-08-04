@@ -106,14 +106,13 @@ def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: j
     electrons_xy = thetaphi_xy(electrons)
     next_electrons_xy = thetaphi_xy(next_electrons)
     next_electrons_norm = jnp.abs(next_electrons_xy[..., 0]) + jnp.abs(next_electrons_xy[..., 1])
-    log_green_function_forward = log_green_function(electrons_xy, next_electrons_xy, v, d, tau)
-    log_green_function_backward = log_green_function(next_electrons_xy, electrons_xy, next_v, next_d, tau)
+
 
     # acceptance_threshold = jnp.exp(2.0 * (jnp.real(next_lnpsi) - jnp.real(lnpsi)))  * jnp.exp(log_green_function_backward - log_green_function_forward)
     # acceptance_threshold = jnp.exp(2.0 * (jnp.abs(next_lnpsi) - jnp.abs(lnpsi)))
     walkers_size = acceptance_threshold.shape[0]
     accepted_idx = jax.random.uniform(key, shape=(walkers_size,)) < acceptance_threshold and jnp.linalg.norm(electrons_xy,axis=tuple(range(1, electrons_xy.ndim)))<_Z_MAX*jax.ones(shape=(walkers_size,)) and jnp.linalg.norm(electrons_xy,axis=tuple(range(1, electrons_xy.ndim)))>_Z_MIN*jax.ones(shape=(walkers_size,))
-    return accepted_idx, acceptance_threshold, log_green_function_forward, log_green_function_backward
+    return accepted_idx, acceptance_threshold
 
 def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electrons_xy: jnp.ndarray, v_xy: jnp.ndarray, next_v_xy: jnp.ndarray, d: float, next_d: float):
     '''
@@ -134,10 +133,9 @@ def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electr
     acceptance_threshold = jnp.exp(jnp.vdot(dR, _2F))
     theta = xy_thetaphi(electrons_xy)[..., 0]
     next_theta = xy_thetaphi(next_electrons_xy)[..., 0]
-    metric = jnp.prod(jnp.sin(theta), axis = -1)
-    next_metric = jnp.prod(jnp.sin(next_theta), axis = -1)
-    # acceptance_threshold = acceptance_threshold * next_metric / metric
-    acceptance_threshold = 1.0 * next_metric / metric
+    metric = jnp.prod(jnp.sin(theta)+1e-6, axis = -1)
+    next_metric = jnp.prod(jnp.sin(next_theta)+1e-6, axis = -1)
+    acceptance_threshold = acceptance_threshold * next_metric / metric
     accepted_idx = jax.random.uniform(key, shape=acceptance_threshold.shape) < acceptance_threshold
     return accepted_idx, acceptance_threshold
 
@@ -170,6 +168,43 @@ def calculate_move_thetaphi(key: PRNGKey, theta_phi: jnp.ndarray, stddev: float 
     return move
 
 
+def sph_sampling(key: PRNGKey, x1: jnp.ndarray, stddev: float = 0.03):
+    theta, phi = x1[..., 0], x1[..., 1]
+    key_theta, key_phi = jax.random.split(key)
+    # Assuming the electrons are on the north pole, and work on theta' - phi' coord
+    theta_prime = jnp.arctan(jax.random.normal(key_theta, shape=theta.shape) * stddev)
+    phi_prime = jax.random.uniform(key_phi, phi.shape) * 2 * jnp.pi
+    xyz_prime = jnp.stack(
+        [
+            jnp.sin(theta_prime) * jnp.cos(phi_prime),
+            jnp.sin(theta_prime) * jnp.sin(phi_prime),
+            jnp.cos(theta_prime),
+        ],
+        axis=-1,
+    )
+    one = jnp.ones_like(phi)
+    zero = jnp.zeros_like(phi)
+    # We then rotate the pole pointing to the direction of each electron
+    rot_z = jnp.array(
+        [
+            [jnp.cos(phi), -jnp.sin(phi), zero],
+            [jnp.sin(phi), jnp.cos(phi), zero],
+            [zero, zero, one],
+        ]
+    )  # Shape (3, 3, nbatch, nelec)
+    rot_y = jnp.array(
+        [
+            [jnp.cos(theta), zero, jnp.sin(theta)],
+            [zero, one, zero],
+            [-jnp.sin(theta), zero, jnp.cos(theta)],
+        ]
+    )
+    x2_xyz = jnp.einsum("ijbn,jkbn,bnk->bni", rot_z, rot_y, xyz_prime)
+    x2, y2, z2 = x2_xyz[..., 0], x2_xyz[..., 1], x2_xyz[..., 2]
+    theta = jnp.arccos(jnp.clip(z2, -1, 1))
+    phi = jnp.sign(y2) * jnp.arccos(jnp.clip(x2 / jnp.sin(theta), -1, 1))
+    return jnp.stack([theta, phi], axis=-1)
+
 def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNetwork, walker_state: WalkerState, num_accepted: int):
     '''
         key: jax.random.PRNGKey
@@ -191,7 +226,9 @@ def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
     # trial_electrons = wrap_coord(trial_electrons) #Adjusting points that are too close to poles
     # trial_electrons_xy = thetaphi_xy(trial_electrons)
 
-    move_thetaphi = calculate_move_thetaphi(key_move, walker_state.electrons, stddev=0.01)
+    # move_thetaphi = calculate_move_thetaphi(key_move, walker_state.electrons, stddev=0.001)
+
+    move_thetaphi = sph_sampling(key_move, walker_state.electrons, stddev=0.001)
     trial_electrons = walker_state.electrons +  move_thetaphi
     trial_electrons = wrap_coord(trial_electrons) #Adjusting points that are too close to poles
     trial_electrons_xy = thetaphi_xy(trial_electrons)
@@ -229,7 +266,7 @@ def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
         dmc_run_step=walker_state.dmc_run_step+1
     )
 
-    return next_walker_state, key, num_accepted
+    return next_walker_state, key, num_accepted, acceptance_threshold
 
 
 def make_vdmc_step(system: System, network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
@@ -250,16 +287,16 @@ def make_vdmc_step(system: System, network: LogPsiNetwork, batch_per_device: int
         """
         
         def step_fn(i, t):
-            walker_state, key, num_accepts = t
+            walker_state, key, num_accepts, acceptance_threshold = t
             return vdmc_update(key, params, system, network, walker_state, num_accepts)
         
         # TODO: fix local energy to a meaningful value
-        walker_state, key, num_accepts= lax.fori_loop(
-            0, steps, step_fn, (init_walker_state, key, 0)  # (walker_state, key, num_accepts)
+        walker_state, key, num_accepts, acceptance_threshold= lax.fori_loop(
+            0, steps, step_fn, (init_walker_state, key, 0, jnp.ones_like(init_walker_state.lnpsi))  # (walker_state, key, num_accepts)
         )
         pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
         pmove = constants.pmean(pmove)
-        return walker_state, pmove
+        return walker_state, pmove, acceptance_threshold
     
     return vdmc_step
 
