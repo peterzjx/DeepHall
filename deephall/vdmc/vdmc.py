@@ -5,7 +5,7 @@ import jax
 from jax import lax
 from jax import numpy as jnp
 from chex import ArrayTree, PRNGKey
-import deephall.dmc.velocity_utils as v_utils
+import deephall.vdmc.velocity_utils as v_utils
 from deephall import constants
 from deephall.types import WalkerState, LogPsiNetwork
 from deephall.config import Config, System
@@ -89,31 +89,6 @@ def wrap_coord(coord):
 #     weights = jnp.sqrt(n_walkers) * weights / jnp.linalg.norm(weights)  # TODO: check if this is correct    
 #     return weights
 
-
-def calculate_acceptance(key: PRNGKey, electrons: jnp.ndarray, next_electrons: jnp.ndarray, lnpsi: jnp.ndarray, next_lnpsi: jnp.ndarray, v: jnp.ndarray, next_v: jnp.ndarray, d: float, next_d: float, tau: float):
-    '''
-        key: jax.random.PRNGKey
-        electrons: electrons coordinates
-        next_electrons: next electrons coordinates
-        psi: current psi
-        next_psi: next psi
-        v: current velocity
-        next_v: next velocity
-        d: d metric
-        next_d: next d metric
-        tau: time step
-    '''
-    electrons_xy = thetaphi_xy(electrons)
-    next_electrons_xy = thetaphi_xy(next_electrons)
-    next_electrons_norm = jnp.abs(next_electrons_xy[..., 0]) + jnp.abs(next_electrons_xy[..., 1])
-
-
-    # acceptance_threshold = jnp.exp(2.0 * (jnp.real(next_lnpsi) - jnp.real(lnpsi)))  * jnp.exp(log_green_function_backward - log_green_function_forward)
-    # acceptance_threshold = jnp.exp(2.0 * (jnp.abs(next_lnpsi) - jnp.abs(lnpsi)))
-    walkers_size = acceptance_threshold.shape[0]
-    accepted_idx = jax.random.uniform(key, shape=(walkers_size,)) < acceptance_threshold and jnp.linalg.norm(electrons_xy,axis=tuple(range(1, electrons_xy.ndim)))<_Z_MAX*jax.ones(shape=(walkers_size,)) and jnp.linalg.norm(electrons_xy,axis=tuple(range(1, electrons_xy.ndim)))>_Z_MIN*jax.ones(shape=(walkers_size,))
-    return accepted_idx, acceptance_threshold
-
 def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electrons_xy: jnp.ndarray, v_xy: jnp.ndarray, next_v_xy: jnp.ndarray, d: float, next_d: float):
     '''
         key: jax.random.PRNGKey
@@ -127,19 +102,24 @@ def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electr
         next_d: next d metric
         tau: time step
     '''
+    # d = jnp.squeeze(d)
+    # next_d = jnp.squeeze(d)
+    
     dR = next_electrons_xy - electrons_xy
     _2F = jnp.real(v_xy + next_v_xy)
+    element_wise = dR * _2F
+    # Sum over last two dimensions
+    dot_product = jnp.sum(element_wise, axis=[-1, -2])
+    acceptance_threshold = jnp.exp(dot_product)
+    metric = jnp.prod(d, axis = [-1, -2])
+    next_metric = jnp.prod(next_d, axis = [-1, -2])
+    print('d shape ', d.shape, acceptance_threshold.shape)
+    acceptance_threshold = acceptance_threshold * metric / next_metric
     
-    acceptance_threshold = jnp.exp(jnp.vdot(dR, _2F))
-    theta = xy_thetaphi(electrons_xy)[..., 0]
-    next_theta = xy_thetaphi(next_electrons_xy)[..., 0]
-    metric = jnp.prod(jnp.sin(theta)+1e-6, axis = -1)
-    next_metric = jnp.prod(jnp.sin(next_theta)+1e-6, axis = -1)
-    acceptance_threshold = acceptance_threshold * next_metric / metric
     accepted_idx = jax.random.uniform(key, shape=acceptance_threshold.shape) < acceptance_threshold
     return accepted_idx, acceptance_threshold
 
-def calculate_move_xy(key: PRNGKey, v: jnp.ndarray, d_metric: float, tau: float = 0.02):
+def calculate_move_xy(key: PRNGKey, xy: jnp.ndarray, stddev: float = 0.03):
     '''
         key: jax.random.PRNGKey
         v: velocity
@@ -149,61 +129,24 @@ def calculate_move_xy(key: PRNGKey, v: jnp.ndarray, d_metric: float, tau: float 
     move = (
         jax.random.normal(
             key=key,
-            shape=v.shape
-        ) * jnp.sqrt(d_metric * tau) 
+            shape=xy.shape
+        ) * stddev
     )
     move = jnp.clip(move, -100, 100)
     
     return move
 
-def calculate_move_thetaphi(key: PRNGKey, theta_phi: jnp.ndarray, stddev: float = 0.03):
-    # TODO: check the metrics if sin theta is needed 
-    move = (
-        jax.random.normal(
-            key=key,
-            shape=theta_phi.shape
-        ) * stddev
-    )
-    move = jnp.clip(move, -30, 30)
-    return move
+# def calculate_move_thetaphi(key: PRNGKey, theta_phi: jnp.ndarray, stddev: float = 0.03):
+#     # TODO: check the metrics if sin theta is needed 
+#     move = (
+#         jax.random.normal(
+#             key=key,
+#             shape=theta_phi.shape
+#         ) * stddev
+#     )
+#     move = jnp.clip(move, -30, 30)
+#     return move
 
-
-def sph_sampling(key: PRNGKey, x1: jnp.ndarray, stddev: float = 0.03):
-    theta, phi = x1[..., 0], x1[..., 1]
-    key_theta, key_phi = jax.random.split(key)
-    # Assuming the electrons are on the north pole, and work on theta' - phi' coord
-    theta_prime = jnp.arctan(jax.random.normal(key_theta, shape=theta.shape) * stddev)
-    phi_prime = jax.random.uniform(key_phi, phi.shape) * 2 * jnp.pi
-    xyz_prime = jnp.stack(
-        [
-            jnp.sin(theta_prime) * jnp.cos(phi_prime),
-            jnp.sin(theta_prime) * jnp.sin(phi_prime),
-            jnp.cos(theta_prime),
-        ],
-        axis=-1,
-    )
-    one = jnp.ones_like(phi)
-    zero = jnp.zeros_like(phi)
-    # We then rotate the pole pointing to the direction of each electron
-    rot_z = jnp.array(
-        [
-            [jnp.cos(phi), -jnp.sin(phi), zero],
-            [jnp.sin(phi), jnp.cos(phi), zero],
-            [zero, zero, one],
-        ]
-    )  # Shape (3, 3, nbatch, nelec)
-    rot_y = jnp.array(
-        [
-            [jnp.cos(theta), zero, jnp.sin(theta)],
-            [zero, one, zero],
-            [-jnp.sin(theta), zero, jnp.cos(theta)],
-        ]
-    )
-    x2_xyz = jnp.einsum("ijbn,jkbn,bnk->bni", rot_z, rot_y, xyz_prime)
-    x2, y2, z2 = x2_xyz[..., 0], x2_xyz[..., 1], x2_xyz[..., 2]
-    theta = jnp.arccos(jnp.clip(z2, -1, 1))
-    phi = jnp.sign(y2) * jnp.arccos(jnp.clip(x2 / jnp.sin(theta), -1, 1))
-    return jnp.stack([theta, phi], axis=-1)
 
 def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNetwork, walker_state: WalkerState, num_accepted: int):
     '''
@@ -216,27 +159,13 @@ def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
     # print_gpu_memory()
     key, key_move, key_accept = jax.random.split(key, 3)
 
-    # theta = walker_state.electrons[..., 0]
-    # phi = walker_state.electrons[..., 1]
+    move_xy = calculate_move_xy(key_move, walker_state.electrons_xy, stddev=0.1)
+    trial_electrons_xy = walker_state.electrons_xy +  move_xy
     
-    
-    # xy_move = calculate_move_xy(key_move, walker_state.v, walker_state.d_metric, tau=0.02)
-    # trial_electrons_xy = walker_state.electrons_xy + xy_move
-    # trial_electrons = xy_thetaphi(trial_electrons_xy)
-    # trial_electrons = wrap_coord(trial_electrons) #Adjusting points that are too close to poles
-    # trial_electrons_xy = thetaphi_xy(trial_electrons)
+    trial_v = v_utils.batch_drift_velocity(params, model, trial_electrons_xy)
+    trial_d = v_utils.calculate_d_metric_xy(trial_electrons_xy, _2Q=system.flux)
 
-    # move_thetaphi = calculate_move_thetaphi(key_move, walker_state.electrons, stddev=0.001)
-
-    move_thetaphi = sph_sampling(key_move, walker_state.electrons, stddev=0.001)
-    trial_electrons = walker_state.electrons +  move_thetaphi
-    trial_electrons = wrap_coord(trial_electrons) #Adjusting points that are too close to poles
-    trial_electrons_xy = thetaphi_xy(trial_electrons)
-    
-    next_v = v_utils.batch_drift_velocity(params, model, trial_electrons)
-    next_d = v_utils.calculate_d_metric_xy(trial_electrons_xy, _2Q=system.flux)
-
-    accepted_idx, acceptance_threshold = calculate_acceptance_xy(key_accept, walker_state.electrons_xy, trial_electrons_xy, walker_state.v, next_v, walker_state.d_metric, next_d)
+    accepted_idx, acceptance_threshold = calculate_acceptance_xy(key_accept, walker_state.electrons_xy, trial_electrons_xy, walker_state.v, trial_v, walker_state.d_metric, trial_d)
     start_step_idx = walker_state.dmc_run_step < 1 # TODO: just a small number
     accepted_idx = jnp.where(start_step_idx, jnp.ones_like(walker_state.lnpsi, dtype=bool), accepted_idx)
     # acceptance_threshold = jnp.ones_like(walker_state.lnpsi)
@@ -244,18 +173,13 @@ def vdmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
 
     # update the walkers according to the acceptance
     next_electrons_xy = jnp.where(accepted_idx[..., None, None], trial_electrons_xy, walker_state.electrons_xy)
-    next_electrons = jnp.where(accepted_idx[..., None, None], trial_electrons, walker_state.electrons)
-    next_v = jnp.where(accepted_idx[..., None, None], next_v, walker_state.v)
-    # next_lnpsi = jnp.where(accepted_idx, next_lnpsi, walker_state.lnpsi)
-    next_d = jnp.where(accepted_idx[..., None,None], next_d, walker_state.d_metric)
+    next_v = jnp.where(accepted_idx[..., None, None], trial_v, walker_state.v)
+    next_d = jnp.where(accepted_idx[..., None,None], trial_d, walker_state.d_metric)
 
-    next_local_energy = v_utils.batch_local_energy(params, system, model, next_electrons)
-    # move = jnp.where(accepted_idx[..., None, None], move, jnp.zeros_like(move))
-    # move = trial_electrons - walker_state.electrons
-    # xy_move = jnp.where(accepted_idx[..., None, None], xy_move, jnp.zeros_like(xy_move))
+    next_local_energy = v_utils.batch_local_energy(params, system, model, next_electrons_xy)
 
     next_walker_state = WalkerState(
-        electrons=next_electrons,
+        electrons=jnp.zeros_like(walker_state.electrons),
         electrons_xy=next_electrons_xy,
         v=next_v,
         d_metric=next_d,

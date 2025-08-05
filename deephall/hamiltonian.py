@@ -23,7 +23,7 @@ from jax.numpy import cos, sin, tan
 from deephall.config import InteractionType, System
 from deephall.types import AngularMomenta, LocalEnergy, LogPsiNetwork, OtherObservables
 from deephall.vdmc import velocity_utils as v_utils
-from deephall.vdmc.velocity_utils import thetaphi_xy, calculate_d_metric, calculate_d_metric_xy
+from deephall.vdmc.velocity_utils import thetaphi_xy, calculate_d_metric_xy
 
 ######################################################################################
 def calculateVectPotential(_2Q: float, electron_xy: jnp.ndarray):
@@ -102,6 +102,47 @@ def make_potential(
 
     return potential
 
+def make_potential_xy(
+    interaction_type: InteractionType, Q: float, r: jnp.ndarray
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Create potential energy function with a given type and geometry."""
+    if interaction_type == InteractionType.coulomb:
+        potential_function = partial(coulomb_potential, Q=Q, r=r)
+    if interaction_type == InteractionType.harmonic:
+        potential_function = partial(harmonic_potential, Q=Q)
+
+    def potential(data: jnp.ndarray) -> jnp.ndarray:
+        x, y = data[..., 0, None], data[..., 1, None]
+        r = jnp.sqrt(x**2 + y**2)
+        
+        xi = x[:, None, :]
+        xj = x[None, :, :]
+        xij = xi-xj
+
+        yi = y[:, None, :]
+        yj = y[None, :, :]
+        yij = yi-yj
+
+        zij = jnp.concatenate([xij, yij], axis = -1)
+        x_zij = jnp.concatenate([-yij, xij], axis = -1)
+        rij2 = (xij**2 + yij**2) + 1e-10
+
+        dij = jnp.sqrt(4 * Q * rij2) / jnp.sqrt( (1 + xi**2 + yi**2) * (1 + xj**2 + yj**2) )
+        dij = jnp.squeeze(dij) + 1e-10
+        
+        mask = ~jnp.eye(dij.shape[0], dtype=bool)  # shape: (N, N)
+        Vij = 1.0 / dij * mask
+        # theta, phi = data[..., 0], data[..., 1]
+        # xyz_data = jnp.stack(
+        #     [sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)], axis=-1
+        # )
+        # assert len(xyz_data.shape) == 2  # (n_electrons, 3)
+        # assert len(dij.shape) == 2  # (n_electrons, 3)
+        # cos12 = jnp.einsum("ia,ja->ij", xyz_data, xyz_data)
+        # print('CORD distance shape', cos12.shape, dij.shape)
+        return jnp.sum(Vij) / 2
+
+    return potential
 
 def make_local_kinetic_energy(f: LogPsiNetwork, Q: float, r: jnp.ndarray):
     r"""Creates a function to for the local kinetic energy, -1/2 \nabla^2 ln|f|.
@@ -217,9 +258,8 @@ def make_local_kinetic_v_energy(f: LogPsiNetwork, Q: float, r: float):
         # Vectorize over N points
         return jax.vmap(per_point_div)
     
-    def kinetic_F(params: ArrayTree, electron_thetaphi: jnp.ndarray):
+    def kinetic_F(params: ArrayTree, electron_xy: jnp.ndarray):
         """Compute divergence using autodiff (F_func is a JAX function)."""
-        electron_xy = thetaphi_xy(electron_thetaphi)
         dmat = jnp.squeeze(calculate_d_metric_xy(electron_xy, 2 * Q))
         
         A = calculateVectPotential( 2 * Q, electron_xy=electron_xy)
@@ -297,7 +337,7 @@ def local_v_energy(v_model: LogPsiNetwork, system: System) -> LocalEnergy:
     Q = system.flux / 2
     radius = jnp.array(system.radius or jnp.sqrt(Q))
     ke = make_local_kinetic_v_energy(v_model, Q, radius)
-    pe = make_potential(system.interaction_type, Q, radius)
+    pe = make_potential_xy(system.interaction_type, Q, radius)
 
     def _e_l(
         params: ArrayTree, data: jnp.ndarray

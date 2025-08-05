@@ -28,7 +28,6 @@ class LaughlinVelocity(nn.Module):
 
     def __call__(self, electrons_xy):
         Ne = sum(self.nspins)
-        # zij shape: (batch, N, N, 2)
         x, y = electrons_xy[..., 0, None], electrons_xy[..., 1, None]
         r = jnp.sqrt(x**2 + y**2)
         

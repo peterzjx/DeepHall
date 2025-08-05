@@ -31,7 +31,7 @@ def simple_cfg():
     config.system.flux = 9
     config.system.interaction_strength = 1.0
     config.optim.iterations = 100
-    config.batch_size = 6
+    config.batch_size = 48
     config.mcmc.burn_in = 1000
     config.mcmc.iteration = 1000
     config.initial_energy = config.system.nspins[0] * 0.5 + 0.467 * config.system.nspins[0] * config.system.interaction_strength
@@ -73,8 +73,11 @@ def test_LnPsi_v(simple_cfg: Config):
 
     dR = next_electrons_xy - electrons_xy
     _2F = jnp.real(v_xy + next_v_xy)
-    
-    wfn_ratio = jnp.exp(jnp.vdot(dR, _2F))
+    element_wise = dR * _2F
+    # Sum over last two dimensions
+    dot_product = jnp.sum(element_wise, axis=(-1, -2))
+    wfn_ratio = jnp.exp(dot_product)
+    print('shape ', dR.shape, _2F.shape)
     print(v_xy)
     
     print(next_v_xy)
@@ -161,7 +164,7 @@ def test_vdmc(simple_cfg: Config):
         print("Step burn in #", step)
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         walker_state, pmove, acceptance_threshold = pmap_mcmc_step(params, walker_state, subkey)
-        print('p = ',pmove, acceptance_threshold)
+        # print('p = ',pmove, acceptance_threshold)
         local_mean_energy = vdmc_sample.weighted_mean_energy(walker_state=walker_state)
         energy_history.at[step % len(energy_history)].set(local_mean_energy)
         walker_state = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=local_mean_energy)
@@ -176,7 +179,7 @@ def test_vdmc(simple_cfg: Config):
             
         
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove  = pmap_mcmc_step(params, walker_state, subkey)
+            walker_state, pmove, acceptance_threshold  = pmap_mcmc_step(params, walker_state, subkey)
             # Ensure all device work is finished before continuing
             # walker_state = jax.tree_util.tree_map(lambda x: x.block_until_ready() if hasattr(x, "block_until_ready") else x, walker_state)
             
