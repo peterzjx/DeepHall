@@ -48,7 +48,6 @@ def get_laughlin_cfg(cfg: Config):
     config.optim.iterations = cfg.optim.iterations
     config.batch_size = cfg.batch_size
     config.mcmc.burn_in = cfg.mcmc.burn_in
-    config.mcmc.iteration = cfg.mcmc.iteration
     config.initial_energy = cfg.initial_energy
     config.log.initial_energy = False
     config.log.save_path = cfg.log.save_path
@@ -85,7 +84,7 @@ def vdmc_fit(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, vdmc_fit_step = optimizers.make_optimizer_dmc_step(cfg, network)
+    opt_init, vdmc_fit_training_step = optimizers.make_optimizer_vdmc_fit_step(cfg, network)
 
     if (
         cfg.optim.optimizer == OptimizerName.none
@@ -96,7 +95,7 @@ def vdmc_fit(cfg: Config):
 
     if state.opt_state is None:
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-        state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons, walker_state.weights)))
+        state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons, walker_state.v)))
 
     logger.info("Start DMC with %s JAX devices", jax.device_count())
 
@@ -129,35 +128,18 @@ def vdmc_fit(cfg: Config):
             
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            state, stats = vdmc_fit_step(state, subkey)
+            state, stats = vdmc_fit_training_step(state, subkey)        
+
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
-                local_energy=f"{vdmc_sample.weighted_mean_energy(walker_state):.6f}",
-                dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.6f}",
-                history_mean_energy=f"{mean_energy:.6f}",
-                weight_max=f"{jnp.max(walker_state.weights):.6f}",
-                weight_min=f"{jnp.min(walker_state.weights):.6f}",
-                weight_std=f"{jnp.std(walker_state.weights):.6f}",
+                electrons=f"{walker_state.electrons[0]:.6f}",
+                v=f"{walker_state.v[0]:.6f}",
+                target=f"{stats['target'][0]:.6f}",
+                prediction=f"{stats['prediction'][0]:.6f}",
+                loss=f"{stats['loss'][0]:.6f}",                
             )
             
-            # writer.log(
-            #     # step=str(step),
-            #     # pmove=f"{pmove[0]:.2f}",
-            #     # energy=f"{stats['energy'].real[0]:.4f}",
-            #     # # energy_imag=f"{stats['energy'].imag[0]:+.4f}",
-            #     # # potential=f"{stats['potential'][0]:.4f}",
-            #     # # kinetic=f"{stats['kinetic'].real[0]:.4f}",
-            #     # # variance=f"{stats['variance'][0]:.4f}",
-            #     # # Lz=f"{stats['angular_momentum_z'][0]:+.4f}",
-            #     # # Lz_square=f"{stats['angular_momentum_z_square'][0]:.4f}",
-            #     # # L_square=f"{stats['angular_momentum_square'][0]:.4f}",
-            #     step=str(step),
-            #     pmove=f"{pmove[0]:.2f}",
-            #     local_energy=f"{vdmc_sample.weighted_mean_energy(walker_state):.6f}",
-            #     dmc_mean_energy=f"{jnp.mean(walker_state.dmc_mean_energy):.6f}",
-            #     history_mean_energy=f"{mean_energy:.6f}"
-            # )
             current_time = time.time()
             if (
                 (

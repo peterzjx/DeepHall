@@ -177,3 +177,36 @@ def make_dmc_loss_fn(
             return stats, tangent_out
 
     return loss_and_grad
+
+def make_vdmc_fit_loss_fn(
+    network: LogPsiNetwork, system: System, mode: LossMode = LossMode.ENERGY_GRAD
+) -> Callable[[ArrayTree, tuple[jnp.ndarray, jnp.ndarray]], tuple[dict, jnp.ndarray]]:
+    '''
+    Return a function that computes MSE loss between network predictions and target values.
+    The function takes parameters and a tuple of (x_data, y_targets) and returns
+    (stats_dict, gradients).
+    '''
+    
+    def loss_and_grad(params: ArrayTree, data_and_targets: tuple[jnp.ndarray, jnp.ndarray]):
+        x_data, y_targets = data_and_targets
+        
+        # Compute predictions for all x_data
+        predictions = jax.vmap(lambda x: network(params, x))(x_data)
+        
+        # Compute MSE between predictions and targets
+        squared_errors = jnp.abs(predictions - y_targets)**2
+        loss_value = jnp.mean(squared_errors)
+        
+        # Compute gradients
+        gradients = jax.grad(lambda p: jnp.mean(jnp.abs(jax.vmap(lambda x: network(p, x))(x_data) - y_targets)**2))(params)
+        
+        # Create stats dictionary
+        stats = {
+            "loss": loss_value,
+            "target": y_targets,
+            "prediction": predictions
+        }
+        
+        return stats, gradients
+    
+    return loss_and_grad

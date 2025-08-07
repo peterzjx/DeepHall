@@ -14,11 +14,11 @@
 
 
 from deephall.config import Config, OptimizerName
-from deephall.loss import make_loss_fn, make_dmc_loss_fn
+from deephall.loss import make_loss_fn, make_dmc_loss_fn, make_vdmc_fit_loss_fn
 from deephall.types import LogPsiNetwork, TrainingInit, TrainingStep
 
 from .adam import make_adam_training_step
-from .kfac import make_kfac_training_step, make_kfac_training_dmc_step
+from .kfac import make_kfac_training_step, make_kfac_training_dmc_step, make_kfac_training_vdmc_fit_step
 from .none import make_inference_step
 from jax import numpy as jnp
 
@@ -40,3 +40,10 @@ def make_optimizer_dmc_step(
     loss_grad_fn = make_dmc_loss_fn(network, cfg.system)
     assert cfg.optim.optimizer == OptimizerName.kfac
     return make_kfac_training_dmc_step(cfg.optim.kfac, loss_grad_fn)
+
+def make_optimizer_vdmc_fit_step(
+    cfg: Config, network: LogPsiNetwork
+) -> tuple[TrainingInit, TrainingStep]:
+    loss_grad_fn = make_vdmc_fit_loss_fn(network, cfg.system)
+    assert cfg.optim.optimizer == OptimizerName.kfac
+    return make_kfac_training_vdmc_fit_step(cfg.optim.kfac, loss_grad_fn)

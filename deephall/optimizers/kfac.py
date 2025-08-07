@@ -221,23 +221,7 @@ def make_kfac_training_step(
     shared_damping = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(1e-3))
 
     def init(params, key, data):
-        return optimizer.init(params, key, data)
-
-    # def step(state: DMCCheckpointState, key: PRNGKey): #DMC version
-    #     params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
-    #     params, opt_state, *_, stats = optimizer.step(
-    #         params=params,
-    #         state=opt_state,
-    #         rng=key,
-    #         batch=electrons,
-    #         momentum=shared_mom,
-    #         damping=shared_damping,
-    #     )
-    #     return (
-    #         DMCCheckpointState(params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
-    #         cast(LossStats, stats["aux"]),
-    #     )
-    
+        return optimizer.init(params, key, data)    
 
     def step(state: CheckpointState, key: PRNGKey): #original VMC version
         params, data, opt_state, mcmc_width = state
@@ -300,6 +284,54 @@ def make_kfac_training_dmc_step(
         return (
             DMCCheckpointState(params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             cast(LossStats, stats["aux"]),
+        )
+
+    return init, step
+
+def make_kfac_training_vdmc_fit_step(
+    optim_cfg: OptimizerKfac, loss_grad_fn
+) -> tuple[TrainingInit, TrainingStep]:
+    def val_and_grad(params, data_and_target):
+        stats, grads = loss_grad_fn(params, data_and_target)
+        return (stats["loss"], stats), grads
+
+    optimizer = kfac_jax.Optimizer(
+        val_and_grad,
+        l2_reg=0.0,
+        norm_constraint=1e-3,
+        value_func_has_aux=True,
+        learning_rate_schedule=optim_cfg.lr.schedule,
+        curvature_ema=0.95,
+        inverse_update_period=1,
+        min_damping=1e-4,
+        num_burnin_steps=0,
+        register_only_generic=False,
+        estimation_mode="fisher_exact",
+        multi_device=True,
+        pmap_axis_name=constants.PMAP_AXIS_NAME,
+        auto_register_kwargs=dict(
+            graph_patterns=GRAPH_PATTERNS,
+        ),
+    )
+    shared_mom = kfac_jax.utils.replicate_all_local_devices(jnp.zeros([]))
+    shared_damping = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(1e-3))
+
+    def init(params, key, data):
+        return optimizer.init(params, key, data)
+
+    def step(state: DMCCheckpointState, key: PRNGKey): #DMC version
+        params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        params, opt_state, *_, stats = optimizer.step(
+            params=params,
+            state=opt_state,
+            rng=key,
+            batch=(electrons, v),  # (x_batch, y_batch)
+            momentum=shared_mom,
+            damping=shared_damping,
+        )
+        return (
+            DMCCheckpointState(params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            stats,
         )
 
     return init, step

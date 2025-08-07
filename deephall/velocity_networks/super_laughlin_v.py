@@ -20,21 +20,29 @@ from jax import numpy as jnp
 def extract_electron_pairs(electron):
     Ne = electron.shape[0]
     
-    # Repeat each electron Ne times to form [Ne, Ne, 2]
+    # Create all possible pairs (including self-pairs)
     ei = jnp.repeat(electron[:, None, :], Ne, axis=1)  # shape: [Ne, Ne, 2]
     ej = jnp.repeat(electron[None, :, :], Ne, axis=0)  # shape: [Ne, Ne, 2]
 
-    # Now ei[i, j] = electron[i], ej[i, j] = electron[j]
-
-    # Create a mask to exclude diagonal (i == j)
-    mask = ~jnp.eye(Ne, dtype=bool)  # shape: [Ne, Ne], True where i ≠ j
-
-    # Apply mask to get all (i ≠ j) pairs
-    ei_masked = ei[mask].reshape(Ne, Ne - 1, 2)  # shape: [Ne, Ne-1, 2]
-    ej_masked = ej[mask].reshape(Ne, Ne - 1, 2)  # shape: [Ne, Ne-1, 2]
-
-    # Concatenate along last axis → shape: [Ne, Ne-1, 2, 2]
-    pairs = jnp.stack([ei_masked, ej_masked], axis=-2)
+    # Create indices for non-diagonal elements
+    # For each electron i, we want pairs with all electrons j != i
+    # We can do this by creating a list of indices for each i
+    indices = []
+    for i in range(Ne):
+        # For electron i, get all j != i
+        j_indices = jnp.concatenate([jnp.arange(i), jnp.arange(i+1, Ne)])
+        indices.append(j_indices)
+    
+    # Stack the indices for all electrons
+    all_indices = jnp.stack(indices)  # shape: [Ne, Ne-1]
+    
+    # Use advanced indexing to get the pairs
+    # For each electron i, get the pairs with electrons j != i
+    ei_pairs = jnp.take_along_axis(ei, all_indices[:, :, None], axis=1)  # shape: [Ne, Ne-1, 2]
+    ej_pairs = jnp.take_along_axis(ej, all_indices[:, :, None], axis=1)  # shape: [Ne, Ne-1, 2]
+    
+    # Stack the pairs along the last axis
+    pairs = jnp.stack([ei_pairs, ej_pairs], axis=-2)  # shape: [Ne, Ne-1, 2, 2]
     
     return pairs  # shape: [Ne, Ne-1, 4]
 
