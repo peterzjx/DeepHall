@@ -91,6 +91,7 @@ class NetworkType(StrEnum):
     laughlin = "laughlin"
     parton = "parton"
     laughlin_v = "laughlin_v"
+    super_laughlin_v = "super_laughlin_v"    
 
 
 class FermionicType(StrEnum):

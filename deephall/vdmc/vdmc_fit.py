@@ -38,14 +38,34 @@ from deephall.train import initalize_state
 
 logger = logging.getLogger("deephall")
 
+def get_laughlin_cfg(cfg: Config):
+    config = Config()
+    config.network.type = cfg.network.type
+    config.seed = 1
+    config.system.nspins = cfg.system.nspins
+    config.system.flux = cfg.system.flux
+    config.system.interaction_strength = cfg.system.interaction_strength
+    config.optim.iterations = cfg.optim.iterations
+    config.batch_size = cfg.batch_size
+    config.mcmc.burn_in = cfg.mcmc.burn_in
+    config.mcmc.iteration = cfg.mcmc.iteration
+    config.initial_energy = cfg.initial_energy
+    config.log.initial_energy = False
+    config.log.save_path = cfg.log.save_path
+    return config
 
-def vdmc_train(cfg: Config):
+def vdmc_fit(cfg: Config):
     init_logging()
     log_manager = LogManager(cfg)
+    laughlin_cfg = get_laughlin_cfg(cfg)
     ## Model loading
+    laughlin_model = make_v_network(laughlin_cfg.system, laughlin_cfg.network)
     model = make_v_network(cfg.system, cfg.network)
+
     network = cast(LogPsiNetwork, model.apply)
-    pmap_mcmc_step, pmove = vdmc_sample.setup_mcmc(cfg, network)
+    laughlin_model = cast(LogPsiNetwork, laughlin_model.apply)
+    
+    pmap_mcmc_step, pmove = vdmc_sample.setup_mcmc(laughlin_cfg, laughlin_model)
     print('initial setup_mcmc done', pmap_mcmc_step)
     # assert cfg.log.pretrained_path is not None
     if cfg.log.pretrained_path is not None:
@@ -65,7 +85,7 @@ def vdmc_train(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, dmc_training_step = optimizers.make_optimizer_dmc_step(cfg, network)
+    opt_init, vdmc_fit_step = optimizers.make_optimizer_dmc_step(cfg, network)
 
     if (
         cfg.optim.optimizer == OptimizerName.none
@@ -83,24 +103,15 @@ def vdmc_train(cfg: Config):
     if initial_step == 0:
         for step in range(cfg.mcmc.burn_in):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(state.params, walker_state, subkey)
-            energy_history, mean_energy = vdmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-            walker_state, changed, _, _, _ = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
-        walker_state, _, _, _, _ = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1, reweight_interval=1, use_external_energy=True, external_energy=mean_energy)            
+            walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
+            # energy_history, mean_energy = vdmc_sample.accumulate_energy(walker_state, energy_history, 1000)
+            # walker_state, changed, _, _, _ = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
+        # walker_state, _, _, _, _ = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1, reweight_interval=1, use_external_energy=True, external_energy=mean_energy)            
         energy_history = None
         logger.info("Burn in DMC complete")
         
-        # if cfg.log.initial_energy:
-        #     # Logging inital energy is helpful for debugging. If we have initial energy
-        #     # but have error in training, it's probably optimizer's fault
-        #     initial_stats, _ = constants.pmap(
-        #         make_loss_fn(network, cfg.system, LossMode.ENERGY_DIFF)
-        #     )(params, data)
-        #     logger.info("Initial energy: %s", initial_stats["energy"][0].real)
-
     state = update_from_walker_state(state, walker_state)
 
-    last_save_time = time.time()
     killer = GracefulKiller()
     with log_manager.create_writer() as writer:
         writer.hide("kinetic", "potential", "Lz_square")
@@ -108,9 +119,9 @@ def vdmc_train(cfg: Config):
         energy_update_interval = 1000
         for step in range(initial_step, cfg.optim.iterations):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, acceptance_threhold, accepted_idx, old_walker, xy_move, move, log_green_function_forward, log_green_function_backward  = pmap_mcmc_step(state.params, walker_state, subkey)
-            energy_history, mean_energy = vdmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
-            walker_state, changed, idx_min, conditioned, change_shape = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
+            walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
+            # energy_history, mean_energy = vdmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
+            # walker_state, changed, idx_min, conditioned, change_shape = vdmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
             state = update_from_walker_state(state, walker_state)
             if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
                 renormal_interval = renormal_interval - 1
@@ -118,7 +129,7 @@ def vdmc_train(cfg: Config):
             
             
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            state, stats = dmc_training_step(state, subkey)
+            state, stats = vdmc_fit_step(state, subkey)
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
