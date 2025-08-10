@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import logging
 import time
-from deephall import Config, vdmc_sample
+from deephall import Config, vvmc_sample
 from deephall.types import LogPsiNetwork, get_walker_state
 from deephall.velocity_networks import LaughlinVelocity, SuperLaughlinVelocity
 from deephall.config import NetworkType

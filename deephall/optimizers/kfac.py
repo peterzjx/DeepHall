@@ -288,12 +288,12 @@ def make_kfac_training_dmc_step(
 
     return init, step
 
-def make_kfac_training_vdmc_fit_step(
+def make_kfac_training_vvmc_fit_step(
     optim_cfg: OptimizerKfac, loss_grad_fn
 ) -> tuple[TrainingInit, TrainingStep]:
     def val_and_grad(params, data_and_target):
         stats, grads = loss_grad_fn(params, data_and_target)
-        return (stats["loss"], stats), grads
+        return (stats["energy"], stats), grads
 
     optimizer = kfac_jax.Optimizer(
         val_and_grad,

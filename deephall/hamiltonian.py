@@ -22,8 +22,8 @@ from jax.numpy import cos, sin, tan
 
 from deephall.config import InteractionType, System
 from deephall.types import AngularMomenta, LocalEnergy, LogPsiNetwork, OtherObservables
-from deephall.vdmc import velocity_utils as v_utils
-from deephall.vdmc.velocity_utils import thetaphi_xy, calculate_d_metric_xy
+from deephall.vvmc import velocity_utils as v_utils
+from deephall.vvmc.velocity_utils import thetaphi_xy, calculate_d_metric_xy
 
 ######################################################################################
 def calculateVectPotential(_2Q: float, electron_xy: jnp.ndarray):
