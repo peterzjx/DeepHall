@@ -288,11 +288,11 @@ def make_kfac_training_dmc_step(
 
     return init, step
 
-def make_kfac_training_vvmc_fit_step(
+def make_kfac_training_vvmc_step(
     optim_cfg: OptimizerKfac, loss_grad_fn
 ) -> tuple[TrainingInit, TrainingStep]:
-    def val_and_grad(params, data_and_target):
-        stats, grads = loss_grad_fn(params, data_and_target)
+    def val_and_grad(params, data_and_weights):
+        stats, grads = loss_grad_fn(params, data_and_weights)
         return (stats["energy"], stats), grads
 
     optimizer = kfac_jax.Optimizer(
@@ -325,13 +325,13 @@ def make_kfac_training_vvmc_fit_step(
             params=params,
             state=opt_state,
             rng=key,
-            batch=(electrons, v),  # (x_batch, y_batch)
+            batch=(electrons, weights),  # Pass both electrons and weights as a tuple
             momentum=shared_mom,
             damping=shared_damping,
         )
         return (
             DMCCheckpointState(params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
-            stats,
+            cast(LossStats, stats["aux"]),
         )
 
     return init, step

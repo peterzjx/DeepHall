@@ -23,7 +23,7 @@ from jax import numpy as jnp
 
 from deephall import constants
 from deephall.config import System
-from deephall.hamiltonian import OtherObservables, local_energy, weighted_local_energy
+from deephall.hamiltonian import OtherObservables, local_energy, weighted_local_energy, local_v_energy
 from deephall.types import LogPsiNetwork, LossStats
 from jax import numpy as jnp
 
@@ -39,6 +39,7 @@ def iqr_clip(x: jnp.ndarray, scale=100.0) -> jnp.ndarray:
 
 
 class LossMode(enum.Enum):
+    FUNCTION_OVLP = enum.auto()
     ENERGY_GRAD = enum.auto()
     ENERGY_DIFF = enum.auto()
     SR_F_VECTOR = enum.auto()
@@ -178,23 +179,17 @@ def make_dmc_loss_fn(
 
     return loss_and_grad
 
-
-def make_vvmc_fit_loss_fn(
+def make_vvmc_loss_fn(
     network: LogPsiNetwork, system: System, mode: LossMode = LossMode.ENERGY_GRAD
-) -> Callable[[ArrayTree, tuple[jnp.ndarray, jnp.ndarray]], tuple[dict, jnp.ndarray]]:
-    '''
-    Return a function that computes MSE loss between network predictions and target values.
-    The function takes parameters and a tuple of (x_data, y_targets) and returns
-    (stats_dict, gradients).
-    '''
-    loss_fn = weighted_local_energy(network, system)
+) -> Callable[[ArrayTree, jnp.ndarray], tuple[LossStats, jnp.ndarray]]:
+    loss_fn = local_v_energy(network, system)
     batch_weighted_local_energy = jax.vmap(loss_fn, in_axes=(None, 0))
 
     df_real = jax.vmap(
-        jax.value_and_grad(lambda params, x: network(params, x).real), in_axes=(None, 0)
+        jax.value_and_grad(lambda params, x, dR: jnp.einsum('...ij,...ij->...', network(params, x).real, dR)), in_axes=(None, 0)
     )
     df_imag = jax.vmap(
-        jax.value_and_grad(lambda params, x: network(params, x).imag), in_axes=(None, 0)
+        jax.value_and_grad(lambda params, x, dR: jnp.einsum('...ij,...ij->...', network(params, x).imag, dR)), in_axes=(None, 0)
     )
 
     def loss_prod(grad_logpsi_conj, diff):
@@ -203,9 +198,9 @@ def make_vvmc_fit_loss_fn(
         )
         return jnp.nan_to_num(2 * jnp.nanmean(grad_logpsi_conj * diff, axis=0))
 
-    def loss_and_grad(params: ArrayTree, data_and_weights: tuple[jnp.ndarray, jnp.ndarray]):
-        data, weights = data_and_weights
-        el, other_observables = batch_weighted_local_energy(params, data_and_weights)
+    def loss_and_grad(params: ArrayTree, xy_and_dR: tuple[jnp.ndarray, jnp.ndarray]):
+        data, dX = xy_and_dR
+        el, other_observables = batch_weighted_local_energy(params, xy_and_dR)
         # el = el * weights / jnp.sum(weights)
         # TODO: check if this is correct
         # other_observables = other_observables * weights / jnp.sum(weights)
@@ -217,27 +212,27 @@ def make_vvmc_fit_loss_fn(
         loss = constants.pmean(jnp.nanmean(el))
         clipped_loss = constants.pmean(jnp.nanmean(iqr_clip(el)))
         diff_to_clip = el - clipped_loss
-        if system.lz_penalty:
-            lz_square = other_observables["angular_momentum_z_square"]
-            lz = other_observables["angular_momentum_z"]
-            clipped_lz_square = constants.pmean(jnp.nanmean(iqr_clip(lz_square)))
-            clipped_lz = constants.pmean(jnp.nanmean(iqr_clip(lz)))
-            diff_to_clip += system.lz_penalty * (
-                (lz_square - clipped_lz_square)
-                - 2 * system.lz_center * (lz - clipped_lz)
-            )
-        if system.l2_penalty:
-            l2 = other_observables["angular_momentum_square"]
-            clipped_l2 = constants.pmean(jnp.nanmean(iqr_clip(l2)))
-            diff_to_clip += system.l2_penalty * (l2 - clipped_l2)
+        # if system.lz_penalty:
+        #     lz_square = other_observables["angular_momentum_z_square"]
+        #     lz = other_observables["angular_momentum_z"]
+        #     clipped_lz_square = constants.pmean(jnp.nanmean(iqr_clip(lz_square)))
+        #     clipped_lz = constants.pmean(jnp.nanmean(iqr_clip(lz)))
+        #     diff_to_clip += system.lz_penalty * (
+        #         (lz_square - clipped_lz_square)
+        #         - 2 * system.lz_center * (lz - clipped_lz)
+        #     )
+        # if system.l2_penalty:
+        #     l2 = other_observables["angular_momentum_square"]
+        #     clipped_l2 = constants.pmean(jnp.nanmean(iqr_clip(l2)))
+        #     diff_to_clip += system.l2_penalty * (l2 - clipped_l2)
         diff = iqr_clip(diff_to_clip)
 
         variance = constants.pmean(jnp.nanmean(el.real**2) - loss.real**2)
         stats = LossStats(**pmean_observables, energy=loss, variance=variance)
-        if mode == LossMode.ENERGY_DIFF:
-            return stats, diff
+        # if mode == LossMode.ENERGY_DIFF:
+        # return stats, diff
 
-        primal_real, tangent_real = df_real(params, data)
+        primal_real, tangent_real = df_real(params, data, dX)
         _, tangent_imag = df_imag(params, data)
         kfac_jax.register_normal_predictive_distribution(primal_real[:, None])
         tangent_out = jax.tree.map(
@@ -252,67 +247,92 @@ def make_vvmc_fit_loss_fn(
             return stats, tangent_out
 
     return loss_and_grad
-    # def loss_and_grad(params: ArrayTree, data_and_targets: tuple[jnp.ndarray, jnp.ndarray]):
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # loss_fn = local_v_energy(network, system)
+    # batch_local_v_energy = jax.vmap(loss_fn, in_axes=(None, 0))
 
-    #     # data, targets = data_and_targets
-    #     x_data, y_targets = data_and_targets
-    #     predictions = jax.vmap(lambda x: network(params, x))(x_data)
-    #     # el, other_observables = batch_weighted_local_energy(params, data_and_weights)
-    #     # el = jnp.abs(predictions - y_targets)**2
-    #     from deephall.vvmc.velocity_utils import batch_local_energy
-    #     el = batch_local_energy(params, system, network, x_data)
-    #     print('in make predict', predictions.shape, y_targets.shape)
+
+    # def loss_prod(grad_logpsi_conj, diff):
+    #     diff = diff.reshape(
+    #         diff.shape + (1,) * (len(grad_logpsi_conj.shape) - len(diff.shape))
+    #     )
+    #     return jnp.nan_to_num(2 * jnp.nanmean(grad_logpsi_conj * diff, axis=0))
+
+    # def loss_and_grad(params: ArrayTree, data_and_dR: tuple[jnp.ndarray, jnp.ndarray]):
+    #     data, dR = data_and_dR #Drift-v and dR
+    #     el, other_observables = batch_local_v_energy(params, data)
     #     # el = el * weights / jnp.sum(weights)
     #     # TODO: check if this is correct
     #     # other_observables = other_observables * weights / jnp.sum(weights)
-    #     # pmean_observables = cast(
-    #     #     OtherObservables,
-    #     #     jax.tree.map(lambda x: constants.pmean(jnp.mean(x)), other_observables),
-    #     # )
+    #     pmean_observables = cast(
+    #         OtherObservables,
+    #         jax.tree.map(lambda x: constants.pmean(jnp.mean(x)), other_observables),
+    #     )
 
     #     loss = constants.pmean(jnp.nanmean(el))
     #     clipped_loss = constants.pmean(jnp.nanmean(iqr_clip(el)))
     #     diff_to_clip = el - clipped_loss
-        
+    #     # if system.lz_penalty:
+    #     #     lz_square = other_observables["angular_momentum_z_square"]
+    #     #     lz = other_observables["angular_momentum_z"]
+    #     #     clipped_lz_square = constants.pmean(jnp.nanmean(iqr_clip(lz_square)))
+    #     #     clipped_lz = constants.pmean(jnp.nanmean(iqr_clip(lz)))
+    #     #     diff_to_clip += system.lz_penalty * (
+    #     #         (lz_square - clipped_lz_square)
+    #     #         - 2 * system.lz_center * (lz - clipped_lz)
+    #     #     )
+    #     # if system.l2_penalty:
+    #     #     l2 = other_observables["angular_momentum_square"]
+    #     #     clipped_l2 = constants.pmean(jnp.nanmean(iqr_clip(l2)))
+    #     #     diff_to_clip += system.l2_penalty * (l2 - clipped_l2)
     #     diff = iqr_clip(diff_to_clip)
 
     #     variance = constants.pmean(jnp.nanmean(el.real**2) - loss.real**2)
-    #     stats = LossStats(energy=loss, variance=variance)
-    #     return stats, diff
+    #     stats = LossStats(**pmean_observables, energy=loss, variance=variance)
+    #     if mode == LossMode.ENERGY_DIFF:
+    #         return stats, diff
 
     #     # primal_real, tangent_real = df_real(params, data)
     #     # _, tangent_imag = df_imag(params, data)
     #     # kfac_jax.register_normal_predictive_distribution(primal_real[:, None])
-    #     # tangent_out = jax.tree.map(
-    #     #     lambda real, imag: loss_prod(real - 1j * imag, diff),
-    #     #     tangent_real,
-    #     #     tangent_imag,
-    #     # )
+    #     tangent_out = jax.tree.map(
+    #         lambda real, imag: loss_prod(real - 1j * imag, diff),
+    #         # tangent_real,
+    #         # tangent_imag,
+    #     )
 
-    #     # if mode == LossMode.ENERGY_GRAD:
-    #     #     return stats, jax.tree.map(jnp.real, tangent_out)
-    #     # elif mode == LossMode.SR_F_VECTOR:
-    #     #     return stats, tangent_out
-    #     ##############################################################################
-    #     # x_data, y_targets = data_and_targets
-        
-    #     # # Compute predictions for all x_data
-    #     # predictions = jax.vmap(lambda x: network(params, x))(x_data)
-        
-    #     # # Compute MSE between predictions and targets
-    #     # squared_errors = jnp.abs(predictions - y_targets)**2
-    #     # loss_value = jnp.mean(squared_errors)
-        
-    #     # # Compute gradients
-    #     # gradients = jax.grad(lambda p: jnp.mean(jnp.abs(jax.vmap(lambda x: network(p, x))(x_data) - y_targets)**2))(params)
-        
-    #     # # Create stats dictionary
-    #     # stats = {
-    #     #     "loss": loss_value,
-    #     #     "target": y_targets,
-    #     #     "prediction": predictions
-    #     # }
-        
-    #     # return stats, gradients
-    
+    #     if mode == LossMode.ENERGY_GRAD:
+    #         return stats, jax.tree.map(jnp.real, tangent_out)
+    #     elif mode == LossMode.SR_F_VECTOR:
+    #         return stats, tangent_out
+
     # return loss_and_grad
+
+
+def make_vvmc_fit_loss_fn(
+    network: LogPsiNetwork, system: System, mode: LossMode = LossMode.FUNCTION_OVLP
+) -> Callable[[ArrayTree, tuple[jnp.ndarray, jnp.ndarray]], tuple[dict, jnp.ndarray]]:
+    print('LOSS MODE', mode) #suppose to be LossMode.ENERGY_GRAD
+    def loss_and_grad(params: ArrayTree, data_and_targets: tuple[jnp.ndarray, jnp.ndarray]):
+        x_data, y_targets = data_and_targets
+        
+        # Compute predictions for all x_data
+        predictions = jax.vmap(lambda x: network(params, x))(x_data)
+        
+        # Compute MSE between predictions and targets
+        squared_errors = jnp.abs(predictions - y_targets)**2
+        loss_value = jnp.mean(squared_errors)
+        
+        # Compute gradients
+        gradients = jax.grad(lambda p: jnp.mean(jnp.abs(jax.vmap(lambda x: network(p, x))(x_data) - y_targets)**2))(params)
+        
+        # Create stats dictionary
+        stats = {
+            "loss": loss_value,
+            "target": y_targets,
+            "prediction": predictions
+        }
+        
+        return stats, gradients
+    
+    return loss_and_grad
