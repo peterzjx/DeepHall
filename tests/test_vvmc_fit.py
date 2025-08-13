@@ -38,7 +38,7 @@ def simple_cfg():
     config.system.tau = 0.0001
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
-    config.optim.iterations = 10
+    config.optim.iterations = 100
     config.optim.optimizer = OptimizerName.adam
     config.batch_size = 48
     config.mcmc.width = 0.3
@@ -129,14 +129,12 @@ def test_vvmc_fit(simple_cfg: Config):
             state = update_from_walker_state(state, walker_state)
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             print("Fitting step # ", step)
-            # print('state:', state)
-            # input()
             state, stats = vvmc_fit_training_step(state, subkey)        
 
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
-                # electrons_xy=f"{walker_state.electrons_xy[0]:.6f}",
+                electrons_xy=f"{walker_state.electrons_xy[0]:.6f}",
                 # v=f"{walker_state.v[0]:.6f}",
                 # target=f"{stats['target'][0]:.6f}",
                 # prediction=f"{stats['prediction'][0]:.6f}",
