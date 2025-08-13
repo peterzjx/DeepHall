@@ -51,7 +51,7 @@ def simple_cfg():
 
 def get_laughlin_cfg(cfg: Config):
     config = Config()
-    config.network.type = cfg.network.type
+    config.network.type = NetworkType.laughlin_v
     config.seed = 1
     config.system.nspins = cfg.system.nspins
     config.system.flux = cfg.system.flux
@@ -128,7 +128,7 @@ def test_vvmc_fit(simple_cfg: Config):
             walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
             state = update_from_walker_state(state, walker_state)
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            print("Fitting step # ", step)
+            print("Fitting total mini-step # ", step)
             # print('state:', state)
             # input()
             state, stats = vvmc_fit_training_step(state, subkey)        
@@ -136,11 +136,12 @@ def test_vvmc_fit(simple_cfg: Config):
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
-                # electrons_xy=f"{walker_state.electrons_xy[0]:.6f}",
-                # v=f"{walker_state.v[0]:.6f}",
-                # target=f"{stats['target'][0]:.6f}",
-                # prediction=f"{stats['prediction'][0]:.6f}",
-                loss=f"{stats['loss'][0]:.6f}",                
+                # electrons_xy=f"{walker_state.electrons_xy[0]}",
+                # v=f"{walker_state.v[0]}",
+                # target=f"{stats['target'][0]}",
+                # prediction=f"{stats['prediction'][0]}",
+                loss=f"{stats['loss'][0]}",   
+                # gradient=f"{stats['gradient']}",             
             )
             
             current_time = time.time()

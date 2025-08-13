@@ -38,7 +38,15 @@ class AngularMomenta(TypedDict):
 
 
 class OtherObservables(AngularMomenta):
-    """Every thing else when calculating local energy."""
+    """Every thing else when calculating local energy."""    electrons: jnp.ndarray = jnp.array([])
+    electrons_xy: jnp.ndarray = jnp.array([])
+    d_metric: jnp.ndarray = jnp.array([])
+    v: jnp.ndarray = jnp.array([])
+    lnpsi: jnp.ndarray = jnp.array([])
+    local_energy: jnp.ndarray = jnp.array([])
+    weights: jnp.ndarray = jnp.array([])
+    dmc_mean_energy: jnp.ndarray = jnp.array([])
+    dmc_run_step: int = 0
 
     kinetic: jnp.ndarray
     potential: jnp.ndarray

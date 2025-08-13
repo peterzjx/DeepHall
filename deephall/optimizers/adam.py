@@ -129,6 +129,7 @@ def make_adam_training_vvmc_fit_step(
                        has_updated, opt_state.gradient_step, opt_state.mini_step)
         
         params = optax.apply_updates(params, updates)
+        stats['gradient'] = grads
         return (
             DMCCheckpointState(params, data, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             stats

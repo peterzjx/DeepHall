@@ -178,7 +178,7 @@ class OptimizerName(StrEnum):
 @dataclass
 class OptimizerAdam:
     lr: LearningRate = field(default_factory=LearningRate)
-    gradient_accumulation_steps: int = 1
+    gradient_accumulation_steps: int = 4
 
 
 @dataclass
