@@ -21,6 +21,7 @@ from optax import OptState
 class WalkerState(NamedTuple):
     electrons: jnp.ndarray = jnp.array([])
     electrons_xy: jnp.ndarray = jnp.array([])
+    electrons_xy_move: jnp.ndarray = jnp.array([])
     d_metric: jnp.ndarray = jnp.array([])
     v: jnp.ndarray = jnp.array([])
     lnpsi: jnp.ndarray = jnp.array([])
@@ -69,6 +70,7 @@ class DMCCheckpointState(NamedTuple):
     params: ArrayTree
     electrons: jnp.ndarray
     electrons_xy: jnp.ndarray
+    electrons_xy_move: jnp.ndarray
     d_metric: jnp.ndarray
     v: jnp.ndarray
     lnpsi: jnp.ndarray

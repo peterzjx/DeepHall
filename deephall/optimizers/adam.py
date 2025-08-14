@@ -116,7 +116,7 @@ def make_adam_training_vvmc_fit_step(
     @constants.pmap
     def step(state: DMCCheckpointState, key: PRNGKey):
         del key
-        params, data, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        params, data, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         stats, grads = loss_grad_fn(params, (electrons_xy, v))
         updates, opt_state = tx.update(grads, opt_state, params)
         
@@ -131,7 +131,7 @@ def make_adam_training_vvmc_fit_step(
         params = optax.apply_updates(params, updates)
         stats['gradient'] = grads
         return (
-            DMCCheckpointState(params, data, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            DMCCheckpointState(params, data, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             stats
             )
 

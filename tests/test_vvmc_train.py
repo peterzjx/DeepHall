@@ -106,29 +106,27 @@ def test_vvmc_train(simple_cfg: Config):
         state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons, walker_state.weights))) #TODO: verify proper Green function and coresponding weights
     
 
-    logger.info("Start DMC with %s JAX devices", jax.device_count())
+    # logger.info("Start DMC with %s JAX devices", jax.device_count())
 
-    if initial_step == 0:
-        for step in range(simple_cfg.mcmc.burn_in):
-            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
-            print("Burn-in step # ", step)
-        energy_history = None
-        logger.info("Burn in DMC complete")
+    # if initial_step == 0:
+    #     for step in range(simple_cfg.mcmc.burn_in):
+    #         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+    #         walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
+    #         print("Burn-in step # ", step)
+    #     energy_history = None
+    #     logger.info("Burn in DMC complete")
         
-    state = update_from_walker_state(state, walker_state)
+    # state = update_from_walker_state(state, walker_state)
 
-    # killer = GracefulKiller()
-    with log_manager.create_writer() as writer:
-        writer.hide("kinetic", "potential", "Lz_square")
-        for step in range(initial_step, simple_cfg.optim.iterations):
-            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
-            state = update_from_walker_state(state, walker_state)
-            sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            print("Fitting step # ", step)
-            print(state)
-            state, stats = vvmc_fit_training_step(state, subkey)        
+    # # killer = GracefulKiller()
+    # with log_manager.create_writer() as writer:
+    #     writer.hide("kinetic", "potential", "Lz_square")
+    #     for step in range(initial_step, simple_cfg.optim.iterations):
+    #         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+    #         walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
+    #         state = update_from_walker_state(state, walker_state)
+    #         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+    #         state, stats = vvmc_fit_training_step(state, subkey)        
 
     #         writer.log(
     #             step=str(step),

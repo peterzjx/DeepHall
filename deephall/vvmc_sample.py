@@ -85,6 +85,7 @@ def initalize_state(cfg: Config, model: nn.Module):
         params=kfac_jax.utils.replicate_all_local_devices(params),
         electrons=coords,
         electrons_xy=coords,
+        electrons_xy_move=jnp.zeros_like(coords),
         d_metric=d_0,
         v=v_0,
         lnpsi=logpsi_0,
@@ -122,6 +123,7 @@ def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCC
         params=kfac_jax.utils.replicate_all_local_devices(params),
         electrons=coords,
         electrons_xy=coords,
+        electrons_xy_move=jnp.zeros_like(coords),
         d_metric=d_0,
         v=v_0,
         lnpsi=logpsi_0,
@@ -159,6 +161,7 @@ def update_mean_energy(walker_state: WalkerState, step: int, update_interval: in
     walker_state = WalkerState(
         electrons=walker_state.electrons,
         electrons_xy=walker_state.electrons_xy,
+        electrons_xy_move=walker_state.electrons_xy_move,
         v=walker_state.v,
         lnpsi=walker_state.lnpsi,
         local_energy=walker_state.local_energy,

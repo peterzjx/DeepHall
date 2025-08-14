@@ -182,6 +182,7 @@ def vvmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
     next_walker_state = WalkerState(
         electrons=jnp.zeros_like(walker_state.electrons),
         electrons_xy=next_electrons_xy,
+        electrons_xy_move=next_electrons_xy - walker_state.electrons_xy,
         v=next_v,
         d_metric=next_d,
         lnpsi=jnp.zeros_like(walker_state.lnpsi), # dummy not updating
