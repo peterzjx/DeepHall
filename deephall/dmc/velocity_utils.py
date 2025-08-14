@@ -49,6 +49,13 @@ def batch_local_energy(params: ArrayTree, system: System, model: LogPsiNetwork, 
     batch_local_energy = jax.vmap(local_energy_fn, in_axes=(None, 0))
     return batch_local_energy(params, electrons_xy)[0].real  # only take total energy
 
+def calculate_d_metric(electrons: jnp.ndarray, _2Q: float):
+    theta = electrons[..., 0]
+    # phi = electrons[..., 1]
+    r = 1.0 / (1e-10 + jnp.tan(theta / 2))    
+    d_metric = (1 + r**2)**2 / (2.0 * _2Q)
+    return jnp.expand_dims(d_metric, axis=-1)
+
 def calculate_d_metric_xy(electrons_xy: jnp.ndarray, _2Q: float):
     x = electrons_xy[..., 0]
     y = electrons_xy[..., 1]

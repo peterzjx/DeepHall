@@ -63,11 +63,11 @@ def initalize_state(cfg: Config, model: nn.Module):
     coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
     coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
     ##############################################################################
-    theta = jnp.array([1.6856816, 2.4018655, 1.5067337, 0.42490557])
-    phi = jnp.array([-2.8268971, -2.2615817, -0.6118226, -2.640316])
-    electrons = jnp.stack([theta, phi], axis=-1)  # shape: (Ne, 2)
-    coords = jnp.stack([electrons] * jax.device_count(), axis=0)[:, jnp.newaxis, :, :]
-    print('xxx', coords.shape)
+    # theta = jnp.array([1.6856816, 2.4018655, 1.5067337, 0.42490557])
+    # phi = jnp.array([-2.8268971, -2.2615817, -0.6118226, -2.640316])
+    # electrons = jnp.stack([theta, phi], axis=-1)  # shape: (Ne, 2)
+    # coords = jnp.stack([electrons] * jax.device_count(), axis=0)[:, jnp.newaxis, :, :]
+    # print('xxx', coords.shape)
     ##############################################################################
     v_0 = jnp.ones_like(coords, dtype=jnp.complex64)
     logpsi_0 = jnp.zeros(coords.shape[:-2])

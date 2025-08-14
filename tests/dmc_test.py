@@ -30,10 +30,11 @@ def simple_config():
     config.batch_size = 6
     config.mcmc.width = 0.3
     
-    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_000556.npz"
+    config.log.pretrained_path = "../logs/psiformer_4_kappa_1.0/ckpt_012999.npz"
     config.log.save_path = "../logs/psiformer_4_kappa_1.0"
     config.mcmc.use_dmc = True
     config.mcmc.burn_in = 2001
+    config.initial_energy = 0.0
     return config
 
 def test_drift_velocity(simple_config: Config, tmp_path: Path, capsys: CaptureFixture[str]):

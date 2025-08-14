@@ -1,22 +1,16 @@
 import jax
-import jax.numpy as jnp
-
-import numpy as np
-from deephall import dmc_sample, Config
-from deephall import constants, mcmc, optimizers
-from deephall.vvmc import vvmc_fit
-from deephall.config import Network, NetworkType, System, PsiformerNetwork,Network, NetworkType, FluxType, FermionicType, PartonNetwork, OptimizerName
-from deephall.types import CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
+from deephall import Config
+from deephall import optimizers
+from deephall.config import Network, NetworkType, OptimizerName
+from deephall.types import get_walker_state, update_from_walker_state
 from pathlib import Path
 from deephall.types import LogPsiNetwork
 from deephall.loss import LossMode, make_loss_fn
 from deephall.velocity_networks import make_v_network
 import jax
-import jax.numpy as jnp
 import kfac_jax
 from omegaconf import OmegaConf
 import logging
-import jax.numpy as jnp
 from deephall.train import train
 from typing import cast
 import pytest

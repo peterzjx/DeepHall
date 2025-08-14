@@ -28,9 +28,8 @@ from jax import numpy as jnp
 from omegaconf import OmegaConf
 
 from deephall import constants, mcmc, optimizers
-from deephall.config import Config, OptimizerName
+from deephall.config import Config, OptimizerName, NetworkType
 from deephall.log import LogManager, init_logging
-from deephall.loss import LossMode, make_loss_fn
 from deephall.velocity_networks import make_v_network
 from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
 from deephall import vvmc_sample
@@ -40,7 +39,7 @@ logger = logging.getLogger("deephall")
 
 def get_laughlin_cfg(cfg: Config):
     config = Config()
-    config.network.type = cfg.network.type
+    config.network.type = NetworkType.laughlin_v
     config.seed = 1
     config.system.nspins = cfg.system.nspins
     config.system.flux = cfg.system.flux
@@ -66,7 +65,6 @@ def vvmc_fit(cfg: Config):
     
     pmap_mcmc_step, pmove = vvmc_sample.setup_mcmc(laughlin_cfg, laughlin_model)
     print('initial setup_mcmc done', pmap_mcmc_step)
-    # assert cfg.log.pretrained_path is not None
     if cfg.log.pretrained_path is not None:
         initial_step, state = (
             vvmc_sample.initalize_state(cfg, model)
@@ -95,49 +93,43 @@ def vvmc_fit(cfg: Config):
 
     if state.opt_state is None:
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-        state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons, walker_state.v)))
+        state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons_xy, walker_state.v)))
 
-    logger.info("Start DMC with %s JAX devices", jax.device_count())
+    logger.info("Start VVMC with %s JAX devices", jax.device_count())
 
     if initial_step == 0:
+        print("Burn-in ...")
         for step in range(cfg.mcmc.burn_in):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
-            walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
-            # energy_history, mean_energy = vvmc_sample.accumulate_energy(walker_state, energy_history, 1000)
-            # walker_state, changed, _, _, _ = vvmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=5000, use_external_energy=True, external_energy=mean_energy)
-        # walker_state, _, _, _, _ = vvmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=1, reweight_interval=1, use_external_energy=True, external_energy=mean_energy)            
-        energy_history = None
+            walker_state, _, _ = pmap_mcmc_step(state.params, walker_state, subkey)
+            
         logger.info("Burn in DMC complete")
+        print("Done")
         
     state = update_from_walker_state(state, walker_state)
 
-    killer = GracefulKiller()
+    # # killer = GracefulKiller()
     with log_manager.create_writer() as writer:
         writer.hide("kinetic", "potential", "Lz_square")
-        renormal_interval = 100
-        energy_update_interval = 1000
         for step in range(initial_step, cfg.optim.iterations):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
-            # energy_history, mean_energy = vvmc_sample.accumulate_energy(walker_state, energy_history, max_length=10000)
-            # walker_state, changed, idx_min, conditioned, change_shape = vvmc_sample.update_mean_energy(walker_state=walker_state,step=step,update_interval=energy_update_interval,reweight_interval=renormal_interval,use_external_energy=True, external_energy=mean_energy)
             state = update_from_walker_state(state, walker_state)
-            if step%renormal_interval==0 and (jnp.min(walker_state.weights)<0.01 or jnp.max(walker_state.weights)>5.0) and renormal_interval>10:
-                renormal_interval = renormal_interval - 1
-            assert renormal_interval>10
-            
-            
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
+            # print("Fitting total mini-step # ", step)
+            # print('state:', state)
+            # input()
             state, stats = vvmc_fit_training_step(state, subkey)        
 
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
-                electrons=f"{walker_state.electrons[0]:.6f}",
-                v=f"{walker_state.v[0]:.6f}",
-                target=f"{stats['target'][0]:.6f}",
-                prediction=f"{stats['prediction'][0]:.6f}",
-                loss=f"{stats['loss'][0]:.6f}",                
+                # electrons_xy=f"{walker_state.electrons_xy[0]}",
+                # v=f"{walker_state.v[0]}",
+                # target=f"{stats['target'][0]}",
+                # prediction=f"{stats['prediction'][0]}",
+                loss=f"{stats['loss'][0]}",   
+                # gradient=f"{stats['gradient']}",             
             )
             
             current_time = time.time()
@@ -145,15 +137,14 @@ def vvmc_fit(cfg: Config):
                 (
                     (step + 1) % cfg.log.save_step_interval == 0
                 )
-                or jnp.isnan(stats["energy"].real).any()
+                # or jnp.isnan(stats["energy"].real).any()
                 or step == cfg.optim.iterations - 1
-                or killer.kill_now
             ):
-                last_save_time = current_time
+                # last_save_time = current_time
                 writer.force_flush()
                 log_manager.save_dmc_checkpoint(step, state)
-            if killer.kill_now or jnp.isnan(stats["energy"].real).any():
-                raise SystemExit("=" * 30 + " ABORT " + "=" * 30)
+            # if killer.kill_now or jnp.isnan(stats["energy"].real).any():
+            #     raise SystemExit("=" * 30 + " ABORT " + "=" * 30)
             
 
 # class GracefulKiller:

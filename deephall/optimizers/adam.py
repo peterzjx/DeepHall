@@ -121,12 +121,12 @@ def make_adam_training_vvmc_fit_step(
         updates, opt_state = tx.update(grads, opt_state, params)
         
         # Check if this step actually applied updates (not just accumulated gradients)
-        has_updated = tx.has_updated(opt_state)
+        # has_updated = tx.has_updated(opt_state)
         
         # Use JAX's debug.print for logging within JAX functions
-        import jax.debug
-        jax.debug.print("MultiSteps: has_updated={}, gradient_step={}, mini_step={}", 
-                       has_updated, opt_state.gradient_step, opt_state.mini_step)
+        # import jax.debug
+        # jax.debug.print("MultiSteps: has_updated={}, gradient_step={}, mini_step={}", 
+        #                has_updated, opt_state.gradient_step, opt_state.mini_step)
         
         params = optax.apply_updates(params, updates)
         stats['gradient'] = grads

@@ -113,10 +113,11 @@ def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electr
     acceptance_threshold = jnp.exp(dot_product)
     metric = jnp.prod(d, axis = [-1, -2])
     next_metric = jnp.prod(next_d, axis = [-1, -2])
-    print('d shape ', d.shape, acceptance_threshold.shape)
+    
     acceptance_threshold = acceptance_threshold * metric / next_metric
     
     accepted_idx = jax.random.uniform(key, shape=acceptance_threshold.shape) < acceptance_threshold
+    print('d, acceptance shape ', d.shape, acceptance_threshold.shape, accepted_idx.shape)
     return accepted_idx, acceptance_threshold
 
 def calculate_move_xy(key: PRNGKey, xy: jnp.ndarray, stddev: float = 0.03):

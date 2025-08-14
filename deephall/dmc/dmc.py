@@ -136,6 +136,7 @@ def calculate_acceptance_xy(key: PRNGKey, electrons_xy: jnp.ndarray, next_electr
     # walkers_size = acceptance_threshold.shape[0]
     # accepted_idx = jax.random.uniform(key, shape=(walkers_size,)) < acceptance_threshold
     accepted_idx = jax.random.uniform(key, shape=log_green_function_backward.shape) < acceptance_threshold
+    print('d, acceptance shape ', d.shape, acceptance_threshold.shape, accepted_idx.shape)
     return accepted_idx, acceptance_threshold, log_green_function_forward, log_green_function_backward
 
 def calculate_move(key: PRNGKey, v: jnp.ndarray, d_metric: float, tau: float):

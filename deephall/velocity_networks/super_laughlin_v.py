@@ -70,10 +70,17 @@ class TwoBodyVelocity(nn.Module):
 
     @nn.compact
     def __call__(self, z):
+        assert z.shape == (2 , 2)
         assert self.features[-1] == 4
+    ########### 1/3 Laughlin original form #######################
+        z1 = z[0][0] + 1j * z[0][1]
+        z2 = z[1][0] + 1j * z[1][1]
+        vx = 1.0 / (z1 - z2)
+        vy = 1j / (z1 - z2)
+        v_laughlin = 3 * jnp.stack([vx, vy], axis = -1)
+    ######################################
         g = MLP(self.features)
-        ex_z = jnp.flip(z, axis=0)  # Swap z1 and z2: [z2, z1]
-        return g(z) - g(ex_z)
+        return v_laughlin + g(z)
 
 class SuperLaughlinVelocity(nn.Module):
     """Create drift velocity for the Laughlin wavefunction."""
@@ -98,11 +105,12 @@ class SuperLaughlinVelocity(nn.Module):
 
         v1 = jnp.concatenate([vx, vy], axis = -1)
         
-        electrons_pairs = extract_electron_pairs(electrons_xy)
+        electrons_pairs = extract_electron_pairs(electrons_xy) #[Ne, Ne-1, 2, 2]
         batched_velocity = jax.vmap(             # over i (Ne)
             jax.vmap(self.TwoBodyV, in_axes=0),       # over j (Ne-1)
             in_axes=0
         )
+        print('Pair feature shape: ', electrons_pairs.shape)
         pair_v = batched_velocity(electrons_pairs) #[Ne, Ne-1, 2]
         
         # assert pair_v.shape == (Ne, Ne-1, 2)
