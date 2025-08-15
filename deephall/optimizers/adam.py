@@ -72,27 +72,30 @@ def make_adam_training_vvmc_step(
 
 
     @constants.pmap
-    def init(params, key, data):
-        del key, data
+    def init(params, key, xy_and_dR):
+        del key, xy_and_dR
         return tx.init(params)
 
     @constants.pmap
-    def step(state: CheckpointState, key: PRNGKey):
+    def step(state: DMCCheckpointState, key: PRNGKey):
         del key
-        params, data, opt_state, mcmc_width = state
-        stats, grads = loss_grad_fn(params, data)
+        params, electron, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        stats, grads = loss_grad_fn(params, (electrons_xy, electrons_xy_move))
         updates, opt_state = tx.update(grads, opt_state, params)
         
         # Check if this step actually applied updates (not just accumulated gradients)
-        has_updated = tx.has_updated(opt_state)
+        # has_updated = tx.has_updated(opt_state)
         
         # Use JAX's debug.print for logging within JAX functions
-        import jax.debug
-        jax.debug.print("MultiSteps: has_updated={}, gradient_step={}, mini_step={}", 
-                       has_updated, opt_state.gradient_step, opt_state.mini_step)
+        # import jax.debug
+        # jax.debug.print("MultiSteps: has_updated={}, gradient_step={}, mini_step={}", 
+        #                has_updated, opt_state.gradient_step, opt_state.mini_step)
         
         params = optax.apply_updates(params, updates)
-        return (CheckpointState(params, data, opt_state, mcmc_width), stats)
+        return (
+            DMCCheckpointState(params, electron, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            stats
+            )
 
     return init, step
 
@@ -119,14 +122,6 @@ def make_adam_training_vvmc_fit_step(
         params, data, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         stats, grads = loss_grad_fn(params, (electrons_xy, v))
         updates, opt_state = tx.update(grads, opt_state, params)
-        
-        # Check if this step actually applied updates (not just accumulated gradients)
-        # has_updated = tx.has_updated(opt_state)
-        
-        # Use JAX's debug.print for logging within JAX functions
-        # import jax.debug
-        # jax.debug.print("MultiSteps: has_updated={}, gradient_step={}, mini_step={}", 
-        #                has_updated, opt_state.gradient_step, opt_state.mini_step)
         
         params = optax.apply_updates(params, updates)
         stats['gradient'] = grads

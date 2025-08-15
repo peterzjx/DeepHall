@@ -311,7 +311,6 @@ def local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
         Returns:
             Local energy and other observables.
         """
-        print('data in _e_l', data.shape)
         potential = pe(data) * system.interaction_strength
         kinetic, angular_momenta = ke(params, data)
         return kinetic + potential, angular_momenta | {

@@ -40,7 +40,7 @@ def count_param_bytes(params):
     _count(params)
     return total
 
-def run_vdmc(simple_config: Config):
+def run_vvmc(simple_config: Config):
     # TODO: load from pretrained vmc checkpoint
     # TODO: calculate initial local energy and logpsi and velocity
     

@@ -113,7 +113,7 @@ def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCC
     coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
     v_0 = jnp.ones_like(coords, dtype=jnp.complex64)
     logpsi_0 = jnp.zeros(coords.shape[:-2])
-    d_0 = v_utils.calculate_d_metric(coords)
+    d_0 = v_utils.calculate_d_metric_xy(coords, cfg.system.flux)
     
     with ckpt_path.open("rb") as npf, np.load(npf, allow_pickle=True) as f:
         step = f["step"].tolist() + 1
