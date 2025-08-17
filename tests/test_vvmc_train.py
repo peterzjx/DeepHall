@@ -34,17 +34,17 @@ def simple_cfg():
     config.system.nspins = (4, 0)
     config.system.flux = 9
     config.system.tau = 0.0001
-    config.system.interaction_strength = 1.0
+    config.system.interaction_strength = 8.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
-    config.optim.optimizer = OptimizerName.none
-    config.optim.iterations = 1000
+    config.optim.optimizer = OptimizerName.adam
+    config.optim.iterations = 10000
     config.batch_size = 48
     config.mcmc.width = 0.3
     config.initial_energy = 0.0
     
     config.log.save_step_interval = 100
-    config.log.pretrained_path = "../logs/super_laughlin_v_fit/ckpt_099999.npz"
-    config.log.save_path = "../logs/super_laughlin_v_train"
+    config.log.pretrained_path = "../logs/super_laughlin_v_fit/ckpt_004999.npz"
+    config.log.save_path = "../logs/super_laughlin_v_train_k8"
     config.mcmc.use_dmc = True
     config.mcmc.burn_in = 10
     return config
@@ -104,7 +104,7 @@ def test_vvmc_train(simple_cfg: Config):
 
     # # killer = GracefulKiller()
     with log_manager.create_writer() as writer:
-        writer.hide("kinetic", "potential", "Lz_square")
+        # writer.hide("kinetic", "potential", "Lz_square")
         for step in range(initial_step, simple_cfg.optim.iterations):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, pmove, acceptance_threhold = pmap_mcmc_step(state.params, walker_state, subkey)
@@ -119,9 +119,9 @@ def test_vvmc_train(simple_cfg: Config):
                 # v=f"{walker_state.v[0]}",
                 # target=f"{stats['target'][0]}",
                 # prediction=f"{stats['prediction'][0]}",
-                energy=f"{stats['energy'][0]}",   
-                kinetic=f"{stats['kinetic'][0]}",   
-                potential=f"{stats['potential'][0]}",   
+                energy=f"{stats['energy'][0].real}",   
+                kinetic=f"{stats['kinetic'][0].real}",   
+                potential=f"{stats['potential'][0].real}",   
                 # gradient=f"{stats['gradient']}",             
             )
             

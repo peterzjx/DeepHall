@@ -44,8 +44,8 @@ def make_optimizer_vvmc_step(
         return make_inference_vvmc_step(loss_grad_fn)
     if cfg.optim.optimizer == OptimizerName.adam:
         return make_adam_training_vvmc_step(cfg.optim.adam, loss_grad_fn)
-    # if cfg.optim.optimizer == OptimizerName.kfac:
-    #     return make_kfac_training_vvmc_step(cfg.optim.kfac, loss_grad_fn)
+    if cfg.optim.optimizer == OptimizerName.kfac:
+        return make_kfac_training_vvmc_step(cfg.optim.kfac, loss_grad_fn)
 
 
 def make_optimizer_dmc_step(

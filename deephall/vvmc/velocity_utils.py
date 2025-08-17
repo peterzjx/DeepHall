@@ -31,14 +31,14 @@ def batch_drift_velocity(params: ArrayTree, model: LogPsiNetwork, electrons_xy: 
     drift_vxy = batch_drift_fn(electrons_xy)  # [nwalkers, nelec, 2]
     return drift_vxy
 
-def batch_local_energy(params: ArrayTree, system: System, v_model: LogPsiNetwork, electrons: jnp.ndarray):
+def batch_local_energy(params: ArrayTree, system: System, v_model: LogPsiNetwork, electrons_xy: jnp.ndarray):
     """
         electrons: [nwalkers, nelec, 2]
     """
     # hamiltonian.local_energy takes non-batched electrons
     local_energy_fn = hamiltonian.local_v_energy(v_model, system)
     batch_local_energy = jax.vmap(local_energy_fn, in_axes=(None, 0))
-    return batch_local_energy(params, electrons)[0].real  # only take total energy
+    return batch_local_energy(params, electrons_xy)[0].real  # only take total energy
 
 def calculate_d_metric_xy(electrons_xy: jnp.ndarray, _2Q: float):
     x = electrons_xy[..., 0]

@@ -62,9 +62,6 @@ def make_adam_training_step(
 def make_adam_training_vvmc_step(
     optim_cfg: OptimizerAdam, loss_grad_fn
 ) -> tuple[TrainingInit, TrainingStep]:
-    # def val_and_grad(params, dat_and_dR):
-    #     stats, grads = loss_grad_fn(params, dat_and_dR)
-    #     return (stats["energy"], stats), grads
 
     tx = optax.adam(learning_rate=optim_cfg.lr.schedule)
     gradient_accumulation_steps = optim_cfg.gradient_accumulation_steps

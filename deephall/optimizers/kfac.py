@@ -291,8 +291,8 @@ def make_kfac_training_dmc_step(
 def make_kfac_training_vvmc_step(
     optim_cfg: OptimizerKfac, loss_grad_fn
 ) -> tuple[TrainingInit, TrainingStep]:
-    def val_and_grad(params, data_and_weights):
-        stats, grads = loss_grad_fn(params, data_and_weights)
+    def val_and_grad(params, xy_and_dX):
+        stats, grads = loss_grad_fn(params, xy_and_dX)
         return (stats["energy"], stats), grads
 
     optimizer = kfac_jax.Optimizer(
@@ -319,18 +319,18 @@ def make_kfac_training_vvmc_step(
     def init(params, key, data):
         return optimizer.init(params, key, data)
 
-    def step(state: DMCCheckpointState, key: PRNGKey): #DMC version
-        params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+    def step(state: DMCCheckpointState, key: PRNGKey): #VVMC version
+        params, electrons, electrons_xy, electron_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         params, opt_state, *_, stats = optimizer.step(
             params=params,
             state=opt_state,
             rng=key,
-            batch=(electrons, weights),  # Pass both electrons and weights as a tuple
+            batch=(electrons_xy, electron_xy_move),  # Pass both electrons and weights as a tuple
             momentum=shared_mom,
             damping=shared_damping,
         )
         return (
-            DMCCheckpointState(params, electrons, electrons_xy, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            DMCCheckpointState(params, electrons, electrons_xy, electron_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             cast(LossStats, stats["aux"]),
         )
 

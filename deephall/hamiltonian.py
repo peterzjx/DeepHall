@@ -23,7 +23,7 @@ from jax.numpy import cos, sin, tan
 from deephall.config import InteractionType, System
 from deephall.types import AngularMomenta, LocalEnergy, LogPsiNetwork, OtherObservables
 from deephall.vvmc import velocity_utils as v_utils
-from deephall.vvmc.velocity_utils import thetaphi_xy, calculate_d_metric_xy
+from deephall.vvmc.velocity_utils import calculate_d_metric_xy
 
 ######################################################################################
 def calculateVectPotential(_2Q: float, electron_xy: jnp.ndarray):
@@ -258,7 +258,7 @@ def make_local_kinetic_v_energy(f: LogPsiNetwork, Q: float, r: float):
         # Vectorize over N points
         return jax.vmap(per_point_div)
     
-    def kinetic_F(params: ArrayTree, electron_xy: jnp.ndarray):
+    def kinetic_E(params: ArrayTree, electron_xy: jnp.ndarray):
         """Compute divergence using autodiff (F_func is a JAX function)."""
         dmat = jnp.squeeze(calculate_d_metric_xy(electron_xy, 2 * Q))
         
@@ -279,7 +279,7 @@ def make_local_kinetic_v_energy(f: LogPsiNetwork, Q: float, r: float):
         return  ke, None
     
     
-    return lambda p, ele_theta: kinetic_F(p, thetaphi_xy(ele_theta))
+    return lambda p, ele_xy: kinetic_E(p, ele_xy)
 
 def local_energy(f: LogPsiNetwork, system: System) -> LocalEnergy:
     """Creates the function to evaluate the local energy.
@@ -339,7 +339,7 @@ def local_v_energy(v_model: LogPsiNetwork, system: System) -> LocalEnergy:
     pe = make_potential_xy(system.interaction_type, Q, radius)
 
     def _e_l(
-        params: ArrayTree, data: jnp.ndarray
+        params: ArrayTree, electrons_xy: jnp.ndarray
     ) -> tuple[jnp.ndarray, OtherObservables]:
         """Returns the total energy.
 
@@ -350,8 +350,8 @@ def local_v_energy(v_model: LogPsiNetwork, system: System) -> LocalEnergy:
         Returns:
             Local energy and other observables.
         """
-        potential = pe(data) * system.interaction_strength
-        kinetic, _ = ke(params, data)
+        potential = pe(electrons_xy) * system.interaction_strength
+        kinetic, _ = ke(params, electrons_xy)
         return kinetic + potential, {
             "potential": potential,
             "kinetic": kinetic,

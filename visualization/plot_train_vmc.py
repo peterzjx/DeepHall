@@ -41,8 +41,8 @@ for idx, file_name in enumerate(sys.argv[1:]):
     # y1 = df["local_energy"]
     # y2 = df["dmc_mean_energy"]
     
-    y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
-    y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
+    # y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
+    # y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
     
     axes[0].plot(x0, y0, '.-', label=file_name,  color=colors[idx])
@@ -51,15 +51,17 @@ for idx, file_name in enumerate(sys.argv[1:]):
     # plt.ylim(3.9,4.5)
     plt.legend()
 
-    batch_size = int(re.findall(r'_b(\d+)', file_name)[-1])
-    mini_num = int(re.findall(r'_mini(\d+)', file_name)[-1])
-    energy = np.mean(y0_smoothed[-1000:])
-    std_energy = np.std(y0_smoothed[-1000:])
-    batch_sizes.append(batch_size)
-    mini_nums.append(mini_num)
+    # batch_size = int(re.findall(r'_b(\d+)', file_name)[-1])
+    # mini_num = int(re.findall(r'_mini(\d+)', file_name)[-1])
+    energy = np.mean(y0[-1000:])
+    std_energy = np.std(y0[-1000:])
+    # batch_sizes.append(batch_size)
+    # mini_nums.append(mini_num)
     energys.append(energy)
     std_energys.append(std_energy)
 # print(batch_sizes, mini_nums)
 # plt.errorbar(x=mini_nums, y=energys, yerr=std_energys)
+print('E = ', energy)
+print('STD = ', energy)
 plt.savefig("train.png")
 plt.show()

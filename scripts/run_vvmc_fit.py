@@ -9,7 +9,6 @@ import kfac_jax
 from omegaconf import OmegaConf
 import logging
 import jax.numpy as jnp
-from deephall.train import train
 
 
 if __name__=="__main__":
@@ -22,7 +21,7 @@ if __name__=="__main__":
     config.system.tau = 0.0001
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
-    config.optim.iterations = 5000
+    config.optim.iterations = 10000
     config.optim.optimizer = OptimizerName.adam
     config.batch_size = 4096
     config.mcmc.width = 0.3
@@ -33,10 +32,10 @@ if __name__=="__main__":
     config.log.save_path = "../logs/super_laughlin_v_fit"
     config.mcmc.burn_in = 5000
 
-    # config.log.pretrained_path = None
-    # vvmc_fit.vvmc_fit(config)
-    config.log.pretrained_path = "../logs/super_laughlin_v_fit/ckpt_004999.npz"
-    for it in range(10):
+    config.log.pretrained_path = None
+    vvmc_fit.vvmc_fit(config)
+    config.log.pretrained_path = f"../logs/super_laughlin_v_fit/ckpt_00{config.optim.iterations -1}.npz"
+    for it in range(2):
         vvmc_fit.vvmc_reverse_fit(config)
         vvmc_fit.vvmc_fit(config)
     

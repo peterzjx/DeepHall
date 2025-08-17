@@ -195,7 +195,7 @@ def vvmc_update(key: PRNGKey, params: ArrayTree, system: System, model: LogPsiNe
     return next_walker_state, key, num_accepted, acceptance_threshold
 
 
-def make_vvmc_step(system: System, network: LogPsiNetwork, batch_per_device: int, steps: int = 10):
+def make_vvmc_step(system: System, network: LogPsiNetwork, batch_per_device: int, steps: int = 1):
     @jax.jit
     def vvmc_step(
         params: ArrayTree, init_walker_state: WalkerState, key: PRNGKey,

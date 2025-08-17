@@ -47,23 +47,65 @@ def extract_electron_pairs(electron):
     return pairs  # shape: [Ne, Ne-1, 4]
 
 
+def extract_rotating_features(xy):
+    """
+    xy: [..., Ne, 2]
+    returns: [..., Ne, Ne, 2]
+    """
+    Ne = xy.shape[-2]
+    idx = (jnp.arange(Ne)[None, :] + jnp.arange(Ne)[:, None]) % Ne
+    # idx: [Ne, Ne], each row is a rotation
+    return xy[..., idx, :] 
+
 class MLP(nn.Module):
     features: tuple[int]
 
     @nn.compact
     def __call__(self, x):
         assert self.features[-1] == 4
-        x = x.flatten()  # flatten [2, 2] -> [4]
+        x = x.flatten()  # [2, 2] -> [4] for a single sample
         for feat in self.features[:-1]:
             x = nn.sigmoid(nn.Dense(feat)(x))
         x = nn.Dense(self.features[-1])(x)
+        
         vx_real = x[0]
         vx_imag = x[1]
-        vy_real = x[3]
-        vy_imag = x[4]
-        vx = vx_real + 1j * vx_imag 
-        vy = vy_real + 1j *vy_imag
+        vy_real = x[2]
+        vy_imag = x[3]
+
+        vx = vx_real + 1j * vx_imag
+        vy = vy_real + 1j * vy_imag
         return jnp.array([vx, vy])
+
+class SmoothMLP(nn.Module):
+    features: tuple[int]
+    sigma: float = 0.05  # Gaussian kernel width
+    n_samples: int = 8   # Number of smoothing samples
+
+    def setup(self):
+        self.mlp = MLP(self.features)
+
+    def mollify(self, x):
+        """
+        Apply Gaussian smoothing to the MLP output over a local neighborhood.
+        """
+        key = self.make_rng('mollify')
+        # Sample perturbations in input space
+        perturbations = jax.random.normal(key, (self.n_samples,) + x.shape) * self.sigma
+        # Shift inputs
+        neighbors = x + perturbations
+        # Evaluate raw MLP at each neighbor
+        vals = jax.vmap(self.mlp)(neighbors)
+        # Gaussian weights
+        weights = jnp.exp(-jnp.sum(perturbations**2, axis=1) / (2 * self.sigma**2))
+        weights /= jnp.sum(weights)
+        # Weighted average
+        return jnp.tensordot(weights, vals, axes=1)
+
+    def __call__(self, x):
+        raw_output = self.mlp(x)
+        smooth_output = self.mollify(x)
+        return smooth_output
 
 class TwoBodyVelocity(nn.Module):
     features: tuple[int]  # e.g., [64, 64, 1]
@@ -79,8 +121,17 @@ class TwoBodyVelocity(nn.Module):
         vy = 1j / (z1 - z2)
         v_laughlin = 3 * jnp.stack([vx, vy], axis = -1)
     ######################################
-        g = MLP(self.features)
-        return v_laughlin + g(z)
+        g = MLP(self.features) 
+        return v_laughlin + g(z) * jnp.exp(-0.001 * (jnp.abs(z1)**2 + jnp.abs(z2)**2))
+
+class ManyBodyVelocity(nn.Module):
+    features: tuple[int]  # e.g., [64, 64, 1]
+
+    @nn.compact
+    def __call__(self, z):
+        assert self.features[-1] == 4
+        v = MLP(self.features) 
+        return 0.1 * v(z) * jnp.exp(-0.001 * jnp.sum(z[...,0]**2 + z[...,1]**2))
 
 class SuperLaughlinVelocity(nn.Module):
     """Create drift velocity for the Laughlin wavefunction."""
@@ -92,6 +143,7 @@ class SuperLaughlinVelocity(nn.Module):
         self.Q1 = self.flux / 2 - (nelec - 1)
         self.features = self.hidden_features +(4,)
         self.TwoBodyV = TwoBodyVelocity(self.features) 
+        self.ManyBodyV = ManyBodyVelocity(self.features)
         assert self.features[-1] == 4
         assert nelec == 2 * self.Q1 + 1  # Ground state for 1/3
 
@@ -106,17 +158,19 @@ class SuperLaughlinVelocity(nn.Module):
         v1 = jnp.concatenate([vx, vy], axis = -1)
         
         electrons_pairs = extract_electron_pairs(electrons_xy) #[Ne, Ne-1, 2, 2]
-        batched_velocity = jax.vmap(             # over i (Ne)
+        batched_v2 = jax.vmap(             # over i (Ne)
             jax.vmap(self.TwoBodyV, in_axes=0),       # over j (Ne-1)
             in_axes=0
         )
-        print('Pair feature shape: ', electrons_pairs.shape)
-        pair_v = batched_velocity(electrons_pairs) #[Ne, Ne-1, 2]
-        
-        # assert pair_v.shape == (Ne, Ne-1, 2)
-        v2 = jnp.sum(pair_v, axis = -2)
-        # print('pair_v shape', pair_v.shape, electrons_pairs.shape, v2.shape)
-        # assert v2.shape == (Ne, 2) #complex64
-        print('vshapes', v1.shape, v2.shape)
-        drift_v = v1 + v2
+        v2_map = batched_v2(electrons_pairs) #[Ne, Ne-1, 2]
+        v2 = jnp.sum(v2_map, axis = -2)
+
+        rotating_features = extract_rotating_features(electrons_xy)
+        batched_v_many = jax.vmap(
+            jax.vmap(self.ManyBodyV, in_axes=0),
+            in_axes=0
+        )
+        v_many_map = batched_v_many(rotating_features)
+        v_many = jnp.sum(v_many_map, axis = -2)
+        drift_v = v1 + v2 + v_many
         return drift_v
