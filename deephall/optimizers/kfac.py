@@ -320,7 +320,7 @@ def make_kfac_training_vvmc_step(
         return optimizer.init(params, key, data)
 
     def step(state: DMCCheckpointState, key: PRNGKey): #VVMC version
-        params, electrons, electrons_xy, electron_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        params, electrons, electrons_xy, electron_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         params, opt_state, *_, stats = optimizer.step(
             params=params,
             state=opt_state,
@@ -330,7 +330,7 @@ def make_kfac_training_vvmc_step(
             damping=shared_damping,
         )
         return (
-            DMCCheckpointState(params, electrons, electrons_xy, electron_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            DMCCheckpointState(params, electrons, electrons_xy, electron_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             cast(LossStats, stats["aux"]),
         )
 

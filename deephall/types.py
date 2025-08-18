@@ -23,6 +23,7 @@ class WalkerState(NamedTuple):
     electrons_xy: jnp.ndarray = jnp.array([])
     electrons_xy_move: jnp.ndarray = jnp.array([])
     d_metric: jnp.ndarray = jnp.array([])
+    last_v: jnp.ndarray = jnp.array([])
     v: jnp.ndarray = jnp.array([])
     lnpsi: jnp.ndarray = jnp.array([])
     local_energy: jnp.ndarray = jnp.array([])
@@ -72,6 +73,7 @@ class DMCCheckpointState(NamedTuple):
     electrons_xy: jnp.ndarray
     electrons_xy_move: jnp.ndarray
     d_metric: jnp.ndarray
+    last_v: jnp.ndarray
     v: jnp.ndarray
     lnpsi: jnp.ndarray
     local_energy: jnp.ndarray

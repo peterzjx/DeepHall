@@ -43,10 +43,10 @@ def make_inference_vvmc_step(loss_grad_fn) -> tuple[TrainingInit, TrainingStep]:
     @constants.pmap
     def step(state: DMCCheckpointState, key: PRNGKey):
         del key
-        params, electron, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        params, electron, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         stats, _ = loss_grad_fn(params, (electrons_xy, electrons_xy_move))
         return (
-            DMCCheckpointState(params, electron, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            DMCCheckpointState(params, electron, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             stats
             )
 

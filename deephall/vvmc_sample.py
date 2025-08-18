@@ -87,6 +87,7 @@ def initalize_state(cfg: Config, model: nn.Module):
         electrons_xy=coords,
         electrons_xy_move=jnp.zeros_like(coords),
         d_metric=d_0,
+        last_v=v_0,
         v=v_0,
         lnpsi=logpsi_0,
         local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
@@ -125,6 +126,7 @@ def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCC
         electrons_xy=coords,
         electrons_xy_move=jnp.zeros_like(coords),
         d_metric=d_0,
+        last_v=v_0,
         v=v_0,
         lnpsi=logpsi_0,
         local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy

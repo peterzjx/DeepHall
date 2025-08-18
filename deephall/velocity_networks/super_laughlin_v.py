@@ -137,13 +137,13 @@ class SuperLaughlinVelocity(nn.Module):
     """Create drift velocity for the Laughlin wavefunction."""
     nspins: tuple[int, int]
     flux: float
-    hidden_features: tuple[int] = (32, 32)  # e.g., [64, 64]
+    hidden_features: tuple[int] = (3, 2)  # e.g., [64, 64]
     def setup(self):
         nelec = sum(self.nspins)
         self.Q1 = self.flux / 2 - (nelec - 1)
         self.features = self.hidden_features +(4,)
         self.TwoBodyV = TwoBodyVelocity(self.features) 
-        self.ManyBodyV = ManyBodyVelocity(self.features)
+        # self.ManyBodyV = ManyBodyVelocity(self.features)
         assert self.features[-1] == 4
         assert nelec == 2 * self.Q1 + 1  # Ground state for 1/3
 
@@ -165,12 +165,12 @@ class SuperLaughlinVelocity(nn.Module):
         v2_map = batched_v2(electrons_pairs) #[Ne, Ne-1, 2]
         v2 = jnp.sum(v2_map, axis = -2)
 
-        rotating_features = extract_rotating_features(electrons_xy)
-        batched_v_many = jax.vmap(
-            jax.vmap(self.ManyBodyV, in_axes=0),
-            in_axes=0
-        )
-        v_many_map = batched_v_many(rotating_features)
-        v_many = jnp.sum(v_many_map, axis = -2)
-        drift_v = v1 + v2 + v_many
+        # rotating_features = extract_rotating_features(electrons_xy)
+        # batched_v_many = jax.vmap(
+        #     jax.vmap(self.ManyBodyV, in_axes=0),
+        #     in_axes=0
+        # )
+        # v_many_map = batched_v_many(rotating_features)
+        # v_many = jnp.sum(v_many_map, axis = -2)
+        drift_v = v1 + v2 # + v_many
         return drift_v

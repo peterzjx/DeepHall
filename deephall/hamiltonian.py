@@ -131,15 +131,8 @@ def make_potential_xy(
         dij = jnp.squeeze(dij) + 1e-10
         
         mask = ~jnp.eye(dij.shape[0], dtype=bool)  # shape: (N, N)
+        # print('in make_potential_xy', mask.shape, dij.shape)
         Vij = 1.0 / dij * mask
-        # theta, phi = data[..., 0], data[..., 1]
-        # xyz_data = jnp.stack(
-        #     [sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)], axis=-1
-        # )
-        # assert len(xyz_data.shape) == 2  # (n_electrons, 3)
-        # assert len(dij.shape) == 2  # (n_electrons, 3)
-        # cos12 = jnp.einsum("ia,ja->ij", xyz_data, xyz_data)
-        # print('CORD distance shape', cos12.shape, dij.shape)
         return jnp.sum(Vij) / 2
 
     return potential

@@ -65,6 +65,7 @@ def make_adam_training_vvmc_step(
 
     tx = optax.adam(learning_rate=optim_cfg.lr.schedule)
     gradient_accumulation_steps = optim_cfg.gradient_accumulation_steps
+    # jax.debug.print(f"multi step ={gradient_accumulation_steps}")
     tx = optax.MultiSteps(tx, gradient_accumulation_steps)
 
 
@@ -76,7 +77,7 @@ def make_adam_training_vvmc_step(
     @constants.pmap
     def step(state: DMCCheckpointState, key: PRNGKey):
         del key
-        params, electron, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        params, electron, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         stats, grads = loss_grad_fn(params, (electrons_xy, electrons_xy_move))
         updates, opt_state = tx.update(grads, opt_state, params)
         
@@ -90,7 +91,7 @@ def make_adam_training_vvmc_step(
         
         params = optax.apply_updates(params, updates)
         return (
-            DMCCheckpointState(params, electron, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            DMCCheckpointState(params, electron, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             stats
             )
 
@@ -116,14 +117,14 @@ def make_adam_training_vvmc_fit_step(
     @constants.pmap
     def step(state: DMCCheckpointState, key: PRNGKey):
         del key
-        params, data, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        params, data, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
         stats, grads = loss_grad_fn(params, (electrons_xy, v))
         updates, opt_state = tx.update(grads, opt_state, params)
         
         params = optax.apply_updates(params, updates)
         stats['gradient'] = grads
         return (
-            DMCCheckpointState(params, data, electrons_xy, electrons_xy_move, d_metric, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            DMCCheckpointState(params, data, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
             stats
             )
 

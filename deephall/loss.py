@@ -179,6 +179,13 @@ def make_dmc_loss_fn(
 
     return loss_and_grad
 
+def safe_pmean(x, axis_name="qmc_pmap_axis"): #TODO: Check if this is proper
+    try:
+        return jax.lax.pmean(x, axis_name=axis_name)
+    except NameError:
+        # no axis bound → just return x
+        return x
+
 def make_vvmc_loss_fn(
     network: LogPsiNetwork, system: System, mode: LossMode = LossMode.ENERGY_GRAD
 ) -> Callable[[ArrayTree, jnp.ndarray], tuple[LossStats, jnp.ndarray]]:
@@ -186,10 +193,10 @@ def make_vvmc_loss_fn(
     batch_local_v_energy = jax.vmap(loss_fn, in_axes=(None, 0))
 
     df_real = jax.vmap(
-        jax.value_and_grad(lambda params, x, dR: jnp.einsum('...ij,...ij->...', network(params, x).real, dR)), in_axes=(None, 0, 0)
+        jax.value_and_grad(lambda params, x, dR: jnp.einsum('...ij,...ij->...', 0.5 * (network(params, x).real + network(params, x-dR).real), dR)), in_axes=(None, 0, 0)
     )
     df_imag = jax.vmap(
-        jax.value_and_grad(lambda params, x, dR: jnp.einsum('...ij,...ij->...', network(params, x).imag, dR)), in_axes=(None, 0, 0)
+        jax.value_and_grad(lambda params, x, dR: jnp.einsum('...ij,...ij->...', 0.5 * (network(params, x).imag + network(params, x-dR).imag), dR)), in_axes=(None, 0, 0)
     )
 
     def loss_prod(grad_logpsi_conj, diff):
@@ -204,18 +211,27 @@ def make_vvmc_loss_fn(
         # el = el * weights / jnp.sum(weights)
         # TODO: check if this is correct
         # other_observables = other_observables * weights / jnp.sum(weights)
+
         pmean_observables = cast(
             OtherObservables,
-            jax.tree.map(lambda x: constants.pmean(jnp.mean(x)), other_observables),
+            jax.tree.map(lambda x: safe_pmean(jnp.mean(x)), other_observables),
         )
 
-        loss = constants.pmean(jnp.nanmean(el))
-        clipped_loss = constants.pmean(jnp.nanmean(iqr_clip(el)))
-        diff_to_clip = el - clipped_loss
+        loss = safe_pmean(jnp.nanmean(el)) #TODO: Check if safe_pmean is proper
+        clipped_loss = safe_pmean(jnp.nanmean(iqr_clip(el)))
+        variance = safe_pmean(jnp.nanmean(el.real**2) - loss.real**2)
 
+        # pmean_observables = cast( 
+        #     OtherObservables,
+        #     jax.tree.map(lambda x: constants.pmean(jnp.mean(x)), other_observables),
+        # )
+
+        # loss = constants.pmean(jnp.nanmean(el))
+        # clipped_loss = constants.pmean(jnp.nanmean(iqr_clip(el)))
+        diff_to_clip = el - clipped_loss
         diff = iqr_clip(diff_to_clip)
 
-        variance = constants.pmean(jnp.nanmean(el.real**2) - loss.real**2)
+        # variance = constants.pmean(jnp.nanmean(el.real**2) - loss.real**2)
         stats = LossStats(**pmean_observables, energy=loss, variance=variance)
         # if mode == LossMode.ENERGY_DIFF:
         # return stats, diff
