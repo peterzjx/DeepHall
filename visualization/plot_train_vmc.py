@@ -45,9 +45,9 @@ for idx, file_name in enumerate(sys.argv[1:]):
     # y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
     
     
-    axes[0].plot(x0, y0, '.-', label=file_name,  color=colors[idx])
-    axes[1].plot(x0, Ek, '.-', label=file_name,  color=colors[idx])
-    axes[2].plot(x0, Ev, '.-', label=file_name,  color=colors[idx])
+    axes[0].plot(x0, y0-np.mean(y0), '.-', label=file_name,  color=colors[idx])
+    axes[1].plot(x0, Ek-np.mean(Ek), '.-', label=file_name,  color=colors[idx])
+    axes[2].plot(x0, Ev-np.mean(Ev), '.-', label=file_name,  color=colors[idx])
     # plt.ylim(3.9,4.5)
     plt.legend()
 
@@ -57,11 +57,11 @@ for idx, file_name in enumerate(sys.argv[1:]):
     std_energy = np.std(y0[-1000:])
     # batch_sizes.append(batch_size)
     # mini_nums.append(mini_num)
-    energys.append(energy)
-    std_energys.append(std_energy)
+    # energys.append(energy)
+    # std_energys.append(std_energy)
 # print(batch_sizes, mini_nums)
 # plt.errorbar(x=mini_nums, y=energys, yerr=std_energys)
 print('E = ', energy)
-print('STD = ', energy)
+print('STD = ', std_energy)
 plt.savefig("train.png")
 plt.show()

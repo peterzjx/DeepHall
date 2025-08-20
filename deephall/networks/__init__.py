@@ -16,6 +16,7 @@ from flax import linen as nn
 
 from deephall.config import Network, NetworkType, System
 from deephall.networks.laughlin import Laughlin
+from deephall.networks.dipole_laughlin import DipoleLaughlin
 from deephall.networks.psiformer import Psiformer
 from deephall.networks.parton import Parton
 
@@ -25,6 +26,12 @@ def make_network(system: System, network: Network) -> nn.Module:
     if network.type == NetworkType.laughlin:
         return Laughlin(
             flux=system.flux, nspins=system.nspins, excitation_lz=system.lz_center
+        )
+    if network.type == NetworkType.dipole_laughlin:
+        return DipoleLaughlin(
+            features= (16, 16, 2),
+            flux=system.flux, 
+            nspins=system.nspins
         )
     if network.type == NetworkType.parton:
         return Parton(

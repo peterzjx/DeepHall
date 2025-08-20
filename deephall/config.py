@@ -89,6 +89,7 @@ class System:
 class NetworkType(StrEnum):
     psiformer = "psiformer"
     laughlin = "laughlin"
+    dipole_laughlin= "dipole_laughlin"
     parton = "parton"
     laughlin_v = "laughlin_v"
     super_laughlin_v = "super_laughlin_v"    

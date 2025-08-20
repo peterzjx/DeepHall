@@ -143,7 +143,7 @@ def setup_mcmc(cfg: Config, network: LogPsiNetwork):
         cfg.system,
         network,
         batch_per_device=cfg.batch_size // jax.device_count(),
-        steps=cfg.mcmc.steps
+        steps=1 # VVMC uses small-step detailed-balance approximation, which requires matching \Delta X and X, i.e., steps = 1
     )
     
     pmap_mcmc_step = constants.pmap(mcmc_step, donate_argnums=1)

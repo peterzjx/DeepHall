@@ -34,7 +34,7 @@ from deephall.loss import LossMode, make_loss_fn
 from deephall.velocity_networks import make_v_network
 from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
 from deephall import vvmc_sample
-from deephall.train import initalize_state
+from deephall.train import GracefulKiller
 
 logger = logging.getLogger("deephall")
 
@@ -90,7 +90,8 @@ def vvmc_train(cfg: Config):
         
     state = update_from_walker_state(state, walker_state)
 
-    # # killer = GracefulKiller()
+    last_save_time = time.time()
+    killer = GracefulKiller()
     with log_manager.create_writer() as writer:
         # writer.hide("kinetic", "potential", "Lz_square")
         for step in range(initial_step, cfg.optim.iterations):
@@ -107,3 +108,19 @@ def vvmc_train(cfg: Config):
                 kinetic=f"{stats['kinetic'][0].real}",   
                 potential=f"{stats['potential'][0].real}",        
             )
+
+            current_time = time.time()
+            if (
+                (
+                    current_time - last_save_time > cfg.log.save_time_interval
+                    and (step + 1) % cfg.log.save_step_interval == 0
+                )
+                or jnp.isnan(stats["energy"].real).any()
+                or step == cfg.optim.iterations - 1
+                or killer.kill_now
+            ):
+                last_save_time = current_time
+                writer.force_flush()
+                log_manager.save_checkpoint(step, state)
+            if killer.kill_now or jnp.isnan(stats["energy"].real).any():
+                raise SystemExit("=" * 30 + " ABORT " + "=" * 30)

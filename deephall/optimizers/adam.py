@@ -65,7 +65,7 @@ def make_adam_training_vvmc_step(
 
     tx = optax.adam(learning_rate=optim_cfg.lr.schedule)
     gradient_accumulation_steps = optim_cfg.gradient_accumulation_steps
-    # jax.debug.print(f"multi step ={gradient_accumulation_steps}")
+    jax.debug.print(f"multi step ={gradient_accumulation_steps}")
     tx = optax.MultiSteps(tx, gradient_accumulation_steps)
 
 

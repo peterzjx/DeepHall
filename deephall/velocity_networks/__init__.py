@@ -17,6 +17,7 @@ from flax import linen as nn
 from deephall.config import VNetwork, NetworkType, System
 from deephall.velocity_networks.super_laughlin_v import SuperLaughlinVelocity
 from deephall.velocity_networks.laughlin_v import LaughlinVelocity
+from deephall.velocity_networks.dipole_laughlin_v import DipoleLaughlinVelocity
 
 
 def make_v_network(system: System, network: VNetwork) -> nn.Module:

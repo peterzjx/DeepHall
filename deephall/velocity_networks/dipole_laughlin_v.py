@@ -77,36 +77,6 @@ class MLP(nn.Module):
         vy = vy_real + 1j * vy_imag
         return jnp.array([vx, vy])
 
-class SmoothMLP(nn.Module):
-    features: tuple[int]
-    sigma: float = 0.05  # Gaussian kernel width
-    n_samples: int = 8   # Number of smoothing samples
-
-    def setup(self):
-        self.mlp = MLP(self.features)
-
-    def mollify(self, x):
-        """
-        Apply Gaussian smoothing to the MLP output over a local neighborhood.
-        """
-        key = self.make_rng('mollify')
-        # Sample perturbations in input space
-        perturbations = jax.random.normal(key, (self.n_samples,) + x.shape) * self.sigma
-        # Shift inputs
-        neighbors = x + perturbations
-        # Evaluate raw MLP at each neighbor
-        vals = jax.vmap(self.mlp)(neighbors)
-        # Gaussian weights
-        weights = jnp.exp(-jnp.sum(perturbations**2, axis=1) / (2 * self.sigma**2))
-        weights /= jnp.sum(weights)
-        # Weighted average
-        return jnp.tensordot(weights, vals, axes=1)
-
-    def __call__(self, x):
-        raw_output = self.mlp(x)
-        smooth_output = self.mollify(x)
-        return smooth_output
-
 class TwoBodyVelocity(nn.Module):
     features: tuple[int]  # e.g., [64, 64, 1]
 
@@ -124,16 +94,7 @@ class TwoBodyVelocity(nn.Module):
         g = MLP(self.features) 
         return v_laughlin * (1 + g(z) * jnp.exp(-0.01 * (jnp.abs(z1)**2 + jnp.abs(z2)**2)))
 
-class ManyBodyVelocity(nn.Module):
-    features: tuple[int]  # e.g., [64, 64, 1]
-
-    @nn.compact
-    def __call__(self, z):
-        assert self.features[-1] == 4
-        v = MLP(self.features) 
-        return 0.1 * v(z) * jnp.exp(-0.001 * jnp.sum(z[...,0]**2 + z[...,1]**2))
-
-class SuperLaughlinVelocity(nn.Module):
+class DipoleLaughlinVelocity(nn.Module):
     """Create drift velocity for the Laughlin wavefunction."""
     nspins: tuple[int, int]
     flux: float
