@@ -3,8 +3,6 @@ import numpy as np
 import sys
 import matplotlib.pyplot as plt
 import matplotlib
-import re
-
 matplotlib.use('TkAgg')
 rolling_window = 20
 def DumpLarge(y, cutoff=100):
@@ -22,46 +20,29 @@ def DumpLarge(y, cutoff=100):
 
     return y_p
 
-colors = ['red', 'blue', 'orange', 'green', 'black', 'gray', 'teal', 'purple']
-batch_sizes = []
-mini_nums = []
-energys = []
-std_energys = []
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
-for idx, file_name in enumerate(sys.argv[1:]):
-    
-    
+for file_name in sys.argv[1:]:
     df = pd.read_csv(file_name)
     x0 = df["step"]
     x0 = range(len(x0))
     y0 = df["energy"]
-    Ek = df['kinetic']
-    Ev = df['potential']
-    # y1 = df["local_energy"]
-    # y2 = df["dmc_mean_energy"]
+    y1 = df["potential"]
+    y2 = df["kinetic"]
     
-    # y0_smoothed = y0.rolling(window=rolling_window, min_periods=1).mean()
-    # y0_smoothed = DumpLarge(y0_smoothed, cutoff=5*np.mean(y0_smoothed))
-    
-    
-    axes[0].plot(x0, y0-np.mean(y0), '.-', label=file_name,  color=colors[idx])
-    axes[1].plot(x0, Ek-np.mean(Ek), '.-', label=file_name,  color=colors[idx])
-    axes[2].plot(x0, Ev-np.mean(Ev), '.-', label=file_name,  color=colors[idx])
-    # plt.ylim(3.9,4.5)
-    plt.legend()
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 4))  # 1 row, 2 columns
+    ax1.set_title('Energy')
+    ax2.set_title('Kinetic')
+    ax3.set_title('Potential')
 
-    # batch_size = int(re.findall(r'_b(\d+)', file_name)[-1])
-    # mini_num = int(re.findall(r'_mini(\d+)', file_name)[-1])
-    energy = np.mean(y0[-1000:])
-    std_energy = np.std(y0[-1000:])
-    # batch_sizes.append(batch_size)
-    # mini_nums.append(mini_num)
-    # energys.append(energy)
-    # std_energys.append(std_energy)
-# print(batch_sizes, mini_nums)
-# plt.errorbar(x=mini_nums, y=energys, yerr=std_energys)
-print('E = ', energy)
-print('STD = ', std_energy)
+    plt.tight_layout()
+    
+    ax1.plot(x0, y0, '.')
+    ax2.plot(x0, y1, '.')
+    ax3.plot(x0, y2, '.', color='red')
+    
+    length = len(y0)
+    print(np.mean(y0[-length // 4:]))
+    print(np.std(y0[-length // 4:]))
+
 plt.savefig("train.png")
 plt.show()

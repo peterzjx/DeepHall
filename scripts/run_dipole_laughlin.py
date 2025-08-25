@@ -9,20 +9,21 @@ import sys
 
 # timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 if __name__ == "__main__":
-    for Ne in [4]:
-        for kappa in [1.0]:
+    for Ne in [6]:
+        for kappa in [2.0]:
             config = Config(network=Network(
                 type=NetworkType.dipole_laughlin,
             ))
             config.system.interaction_strength = kappa
             config.system.nspins = (Ne, 0)
             config.system.flux = 3*(Ne - 1)
-            config.optim.optimizer = OptimizerName.none
-            config.optim.adam.lr.rate = 0.0000
+            # config.optim.optimizer = OptimizerName.adam
+            # config.optim.adam.lr.rate = 1e-6
+            config.optim.optimizer = OptimizerName.kfac
             config.optim.adam.gradient_accumulation_steps = 10
-            config.optim.iterations = 10000
-            config.batch_size = 512
+            config.optim.iterations = 5000
+            config.batch_size = 1024
 
             config.mcmc.width = 0.5 
-            config.log.save_path = f"../logs/inference_dipole_laughlin_{Ne}_kappa_{kappa}_b{config.batch_size}_mini{config.optim.adam.gradient_accumulation_steps}"
+            config.log.save_path = f"../logs/dipole_laughlin_{Ne}_kappa_{kappa}_b{config.batch_size}_mini{config.optim.adam.gradient_accumulation_steps}"
             train(config)

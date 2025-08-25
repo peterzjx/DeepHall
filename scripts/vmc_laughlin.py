@@ -9,8 +9,8 @@ import sys
 
 # timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 if __name__ == "__main__":
-    for Ne in [4]:
-        for kappa in [1.0]:
+    for Ne in [6]:
+        for kappa in [2.0]:
             config = Config(network=Network(
                 type=NetworkType.laughlin,
                 # parton=PartonNetwork(
@@ -24,7 +24,7 @@ if __name__ == "__main__":
             config.optim.optimizer = OptimizerName.none
             config.optim.adam.lr.rate = 0.0000
             config.optim.adam.gradient_accumulation_steps = 10
-            config.optim.iterations = 10000
+            config.optim.iterations = 5000
             config.batch_size = 1024
 
             config.mcmc.width = 0.5 
