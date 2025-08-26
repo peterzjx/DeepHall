@@ -143,30 +143,13 @@ class MLP(nn.Module):
         for feat in self.features[:-1]:
             x = nn.sigmoid(nn.Dense(feat)(x))
         out = nn.Dense(self.features[-1])(x)
-        rho = jnp.sum(out) * 0.02
+        rho = jnp.sum(out) * 0.005
         result = direction * rho
         print('h_one', result.shape)
         return result
-
-# class EnvAttention(nn.Module):
-#     hidden_dim: int = 64
-#     num_heads: int = 4
-
-#     @nn.compact
-#     def __call__(self, env_coords):
-#         # env_coords: shape [N_env], complex
-#         x = jnp.stack([env_coords.real, env_coords.imag], axis=-1)  # [N_env, 2]
-#         # simple self-attention to aggregate environment
-#         attn = nn.SelfAttention(
-#             num_heads=self.num_heads,
-#             qkv_features=self.hidden_dim,
-#             out_features=self.hidden_dim
-#         )(x[None])  # add batch dim
-#         env_embed = attn.mean(axis=1)  # [hidden_dim]
-#         return jnp.squeeze(env_embed)
     
 class PairDisplacementNet(nn.Module):
-    max_disp: float = 0.05   # tunable but bounded
+    max_disp: float = 0.01   # tunable but bounded
     d_model: int = 16        # hidden size, pair_wise_feat & env_feat dim
     num_heads: int = 4
 
@@ -202,7 +185,6 @@ class PairDisplacementNet(nn.Module):
         # ---- 3. Fuse pair + attention ----
         fused = jnp.concatenate([pair_feat, attn])
         fused = nn.sigmoid(nn.Dense(self.d_model)(fused))
-        print('attn', attn.shape, pair_feat.shape, fused.shape)
         # ---- 4. Predict displacement ----
         out = nn.Dense(2)(fused)  # (dx, dy)
         out = jnp.tanh(out) * self.max_disp
@@ -218,7 +200,7 @@ class DipoleLaughlin(nn.Module):
     flux: float
     cf_flux: int = 1
     "Flux p for composite fermion."
-    dipole_mode = "pair_env_attention"
+    dipole_mode = "simple_mlp"
 
     
     def setup(self):
@@ -230,10 +212,8 @@ class DipoleLaughlin(nn.Module):
         elif self.dipole_mode == "simple_attention":
             self.get_pairwise_attention = RelativeAttention()
         elif self.dipole_mode == "pair_env_attention":
-            # self.get_env_electron_feat = EnvAttention() # Taking all N-2 electrons as environemt and extract features
             self.get_pairwise_attention = PairDisplacementNet()
-        # self.dipole_vector = MLP(self.features)
-        # self.get_pairwise_attention = RelativeAttention()
+
         if nelec == 2 * self.Q1 + 1:  # Ground state
             pass
         else:
@@ -259,24 +239,26 @@ class DipoleLaughlin(nn.Module):
         ln_wfn1 = 3 / 2 * jnp.sum(jnp.log(masked_complex_zij))
         
 ############ simple dipole correction ########################################
-        # zizj, z_Z = extract_triplets(complex_z)
-        # rij2 = (zizj[..., 0] - zizj[..., 1])**2
-        # # get_dij = jax.vmap(self.dipole_vector, in_axes = 0)
-        # get_dij = jax.vmap(self.get_pairwise_attention, in_axes = 0)
-        # dij = get_dij(z_Z)
-        # dipole_correction =  jnp.sum(jnp.log(1-dij**2 / rij2),axis=-1)
-############ simple dipole correction ########################################
-        _, zij_pairs, envs = extract_zizj_env(complex_z)
-        zij_pairs_both = jnp.stack([zij_pairs, zij_pairs[:, ::-1]], axis=1)  # shape (N, 2, ...)
-        envs_both = jnp.stack([envs, envs], axis=1)  # shape (N, 2, ...)
-        get_dij = jax.vmap(
-            jax.vmap(self.get_pairwise_attention, in_axes=(0, 0)),  # inner vmap over axis=1
-            in_axes=(0, 0)                                          # outer vmap over axis=0
-        )
-        dij_both = get_dij(zij_pairs_both, envs_both)  # shape (N, 2, ...)
-        dij = jnp.sum(dij_both, axis=1) * 0.5
-        rij2 = (zij_pairs[..., 0] - zij_pairs[..., 1])**2
-        dipole_correction =  jnp.sum(jnp.log(1-dij**2 / rij2),axis=-1)
+        if self.dipole_mode == "simple_mlp":
+            zizj, z_Z = extract_triplets(complex_z)
+            rij2 = (zizj[..., 0] - zizj[..., 1])**2
+            get_dij = jax.vmap(self.dipole_vector, in_axes = 0)
+            # get_dij = jax.vmap(self.get_pairwise_attention, in_axes = 0)
+            dij = get_dij(z_Z)
+            dipole_correction =  jnp.sum(jnp.log(1-dij**2 / rij2),axis=-1)
+##############################################################################
+        elif self.dipole_mode == "pair_env_attention":
+            _, zij_pairs, envs = extract_zizj_env(complex_z)
+            zij_pairs_both = jnp.stack([zij_pairs, zij_pairs[:, ::-1]], axis=1)  # shape (N, 2, ...)
+            envs_both = jnp.stack([envs, envs], axis=1)  # shape (N, 2, ...)
+            get_dij = jax.vmap(
+                jax.vmap(self.get_pairwise_attention, in_axes=(0, 0)),  # inner vmap over axis=1
+                in_axes=(0, 0)                                          # outer vmap over axis=0
+            )
+            dij_both = get_dij(zij_pairs_both, envs_both)  # shape (N, 2, ...)
+            dij = jnp.sum(dij_both, axis=1) * 0.5
+            rij2 = (zij_pairs[..., 0] - zij_pairs[..., 1])**2
+            dipole_correction =  jnp.sum(jnp.log(1-dij**2 / rij2),axis=-1)
         ln_laughlin = ln_wfn0 + ln_wfn1 + dipole_correction
 
         return ln_laughlin

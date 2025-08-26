@@ -92,7 +92,8 @@ class NetworkType(StrEnum):
     dipole_laughlin= "dipole_laughlin"
     parton = "parton"
     laughlin_v = "laughlin_v"
-    super_laughlin_v = "super_laughlin_v"    
+    super_laughlin_v = "super_laughlin_v"
+    dipole_laughlin_v = "dipole_laughlin_v"
 
 
 class FermionicType(StrEnum):

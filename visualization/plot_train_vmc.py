@@ -31,8 +31,8 @@ for file_name in sys.argv[1:]:
     
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 4))  # 1 row, 2 columns
     ax1.set_title('Energy')
-    ax2.set_title('Kinetic')
-    ax3.set_title('Potential')
+    ax2.set_title('Potential')
+    ax3.set_title('Kinetic')
 
     plt.tight_layout()
     
@@ -43,6 +43,9 @@ for file_name in sys.argv[1:]:
     length = len(y0)
     print(np.mean(y0[-length // 4:]))
     print(np.std(y0[-length // 4:]))
+
+    print(np.mean(y1[-length // 4:]))
+    print(np.std(y1[-length // 4:]))
 
 plt.savefig("train.png")
 plt.show()

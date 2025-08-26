@@ -30,3 +30,7 @@ def make_v_network(system: System, network: VNetwork) -> nn.Module:
         return SuperLaughlinVelocity(
             flux=system.flux, nspins=system.nspins
         )
+    if network.type == NetworkType.dipole_laughlin_v:
+        return DipoleLaughlinVelocity(
+            flux=system.flux, nspins=system.nspins
+        )

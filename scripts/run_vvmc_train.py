@@ -29,7 +29,7 @@ logger = logging.getLogger("deephall")
 
 if __name__=="__main__":
     config = Config(network=Network(
-            type=NetworkType.super_laughlin_v
+            type=NetworkType.dipole_laughlin_v
         ))
     config.seed = 564
     config.system.nspins = (4, 0)
@@ -37,20 +37,20 @@ if __name__=="__main__":
     config.system.interaction_strength = 6.0
     config.optim.optimizer = OptimizerName.adam
     config.optim.adam.lr.rate = 1e-4
-    config.optim.adam.gradient_accumulation_steps = 100
+    config.optim.adam.gradient_accumulation_steps = 10
     # config.optim.optimizer = OptimizerName.kfac
     # config.optim.kfac.lr.rate = 1e-6
 
-    config.optim.iterations = 50000
-    config.batch_size = 4096
+    config.optim.iterations = 2000
+    config.batch_size = 1024
     config.mcmc.width = 0.3
     config.initial_energy = 0.0
     
     config.log.save_step_interval = 100
     # config.log.pretrained_path = "../logs/super_laughlin_v_fit/ckpt_001999.npz"
-    config.log.pretrained_path = "../logs/super_laughlin_v_fit/ckpt_001999.npz"
-    config.log.save_path = f"../logs/super_laughlin_v_train_k{config.system.interaction_strength}"
-    config.mcmc.burn_in = 2000
+    config.log.pretrained_path = "../logs/dipole_laughlin_v_fit/ckpt_001999.npz"
+    config.log.save_path = f"../logs/dipole_laughlin_v_train_k{config.system.interaction_strength}"
+    config.mcmc.burn_in = 1000
 
     vvmc_train.vvmc_train(config)
     
