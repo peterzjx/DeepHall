@@ -148,7 +148,6 @@ class SuperLaughlinVelocity(nn.Module):
         assert nelec == 2 * self.Q1 + 1  # Ground state for 1/3
 
     def __call__(self, electrons_xy):
-        print('##xy shape', electrons_xy.shape)
         Ne = sum(self.nspins)
         x, y = electrons_xy[..., 0, None], electrons_xy[..., 1, None]
         r = jnp.sqrt(x**2 + y**2)
