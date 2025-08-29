@@ -71,7 +71,7 @@ def extract_zizj_env(z: jnp.ndarray):
     return pair_idx, pairs, env
 
 class AttentionVelocityNet(nn.Module):
-    d_model: int = 16        # hidden size, pair_wise_feat & env_feat dim
+    d_model: int = 64        # hidden size, pair_wise_feat & env_feat dim
     num_heads: int = 4
 
     @nn.compact
@@ -87,6 +87,7 @@ class AttentionVelocityNet(nn.Module):
             jnp.real(zi), jnp.imag(zi),
             jnp.real(zj), jnp.imag(zj),
             jnp.real(zi - zj), jnp.imag(zi - zj),
+            jnp.real(zi + zj), jnp.imag(zi + zj),
         ])  # shape (6,)
 
         pair_feat = nn.Dense(self.d_model)(pair_feat)
@@ -123,11 +124,10 @@ class AttentionVelocityNet(nn.Module):
         fused_im = nn.sigmoid(nn.Dense(self.d_model)(fused_im))
         # ---- 4. Predict displacement ----
         out = nn.Dense(Ne * 2)(fused_im)
-        velocity_im = jnp.tanh(out)
-        velocity_im = velocity_re.reshape([Ne, 2])
+        velocity_im = nn.sigmoid(out)
+        velocity_im = velocity_im.reshape([Ne, 2])
 
         velocity = velocity_re + 1j * velocity_im # [[v1x, v1y], [v2x, v2y],...,[vNx, vNy]]~[Ne, 2], complex value
-        print('velocity shape', velocity.shape)
         return velocity
 
 class DipoleLaughlinVelocity(nn.Module):
@@ -188,15 +188,16 @@ class DipoleLaughlinVelocity(nn.Module):
 
         cpx_zij_pairs = zij_pairs[..., 0] + 1j * zij_pairs[..., 1]
         cpx_z_stack = z_stack[..., 0] + 1j * z_stack[..., 1]
-        print('zij_pair shape', electrons_xy.shape, zij_pairs.shape, cpx_zij_pairs.shape, cpx_z_stack.shape)
+        # print('zij_pair shape', electrons_xy.shape, zij_pairs.shape, cpx_zij_pairs.shape, cpx_z_stack.shape)
         
-        # get_vij = jax.vmap(
-        #     jax.vmap(self.get_pairwise_attention, in_axes=(0, 0)),  # inner vmap over axis=0
-        #     in_axes=(0, 0)                                          # outer vmap over axis=0
-        # )
-        # cpx_vij_both = get_vij(cpx_zij_pairs, cpx_z_stack)  # shape (N, 2, ...)
-        
-        # atten_v2 = jnp.sum(cpx_vij_both, axis=(0,1))
+        get_vij = jax.vmap(
+            jax.vmap(self.get_pairwise_attention, in_axes=(0, 0)),  # inner vmap over axis=0
+            in_axes=(0, 0)                                          # outer vmap over axis=0
+        )
+        cpx_vij_both = get_vij(cpx_zij_pairs, cpx_z_stack)  # shape (N, 2, ...)
+        print("cpx_zij_pairs, cpx_z_stack", cpx_zij_pairs.shape, cpx_z_stack.shape)
+        atten_v2 = jnp.sum(cpx_vij_both, axis=(0,1))
         # print('cpx_vij_both shape', cpx_vij_both.shape, atten_v2.shape)
-        drift_v = v1 + 3 * integer_v2 # + atten_v2
+        # jax.debug.print("attention v = {}", atten_v2[0])
+        drift_v = v1 + 1 * integer_v2  +  2 * atten_v2
         return drift_v

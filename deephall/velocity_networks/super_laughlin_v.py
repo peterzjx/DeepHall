@@ -143,7 +143,7 @@ class SuperLaughlinVelocity(nn.Module):
         self.Q1 = self.flux / 2 - (nelec - 1)
         self.features = self.hidden_features +(4,)
         self.TwoBodyV = TwoBodyVelocity(self.features) 
-        # self.ManyBodyV = ManyBodyVelocity(self.features)
+        self.ManyBodyV = ManyBodyVelocity(self.features)
         assert self.features[-1] == 4
         assert nelec == 2 * self.Q1 + 1  # Ground state for 1/3
 
@@ -166,13 +166,13 @@ class SuperLaughlinVelocity(nn.Module):
         v2_map = batched_v2(electrons_pairs) #[Ne, Ne-1, 2]
         v2 = jnp.sum(v2_map, axis = -2)
 
-        # rotating_features = extract_rotating_features(electrons_xy)
-        # batched_v_many = jax.vmap(
-        #     jax.vmap(self.ManyBodyV, in_axes=0),
-        #     in_axes=0
-        # )
-        # v_many_map = batched_v_many(rotating_features)
-        # v_many = jnp.sum(v_many_map, axis = -2)
+        rotating_features = extract_rotating_features(electrons_xy)
+        batched_v_many = jax.vmap(
+            jax.vmap(self.ManyBodyV, in_axes=0),
+            in_axes=0
+        )
+        v_many_map = batched_v_many(rotating_features)
+        v_many = jnp.sum(v_many_map, axis = -2)
         drift_v = v1 + v2
-        # drift_v = drift_v + v_many
+        drift_v = drift_v + v_many
         return drift_v
