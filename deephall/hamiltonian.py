@@ -242,23 +242,24 @@ def make_local_kinetic_v_energy(f: LogPsiNetwork, Q: float, r: float):
         def compute_divergence(full_config):
             # full_config: [Ne, 2] (full electron configuration)
             Ne = full_config.shape[0]
+            
             def velocity_at_electron_i(electron_i_pos, electron_i_idx):
                 # Create a modified configuration where we replace electron i's position
-                modified_config = full_config.at[electron_i_idx].set(
-                    electron_i_pos)
+                modified_config = full_config.at[electron_i_idx].set(electron_i_pos)
                 velocity_field = F(modified_config)  # [Ne, 2]
-                # [2] - velocity of electron i
-                return velocity_field[electron_i_idx]
+                return velocity_field[electron_i_idx]  # [2] - velocity of electron i
+            
             # Compute divergence for each electron
             divergences = []
             for i in range(Ne):
                 # Compute Jacobian of velocity of electron i w.r.t. its own position
                 jac_fn = jax.jacfwd(lambda pos: velocity_at_electron_i(pos, i))
-                # [2, 2] - Jacobian of velocity w.r.t. position
-                jac = jac_fn(full_config[i])
+                jac = jac_fn(full_config[i])  # [2, 2] - Jacobian of velocity w.r.t. position
                 div_i = jnp.trace(jac)  # scalar - divergence
                 divergences.append(div_i)
+            
             return jnp.array(divergences)  # [Ne] - divergence at each electron
+        
         return compute_divergence
     
     def kinetic_E(params: ArrayTree, electron_xy: jnp.ndarray):

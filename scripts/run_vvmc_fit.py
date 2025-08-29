@@ -37,5 +37,5 @@ if __name__=="__main__":
     config.log.pretrained_path = f"../logs/dipole_laughlin_v_fit/ckpt_00{config.optim.iterations -1}.npz"
     for it in range(2):
         vvmc_fit.vvmc_reverse_fit(config)
-        vvmc_fit.vvmc_fit(config)
+    #     vvmc_fit.vvmc_fit(config)
     

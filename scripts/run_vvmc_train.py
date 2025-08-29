@@ -29,7 +29,7 @@ logger = logging.getLogger("deephall")
 
 if __name__=="__main__":
     config = Config(network=Network(
-            type=NetworkType.dipole_laughlin_v
+            type=NetworkType.laughlin_v
         ))
     config.seed = 564
     config.system.nspins = (4, 0)
