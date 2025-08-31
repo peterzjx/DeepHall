@@ -120,7 +120,7 @@ def vvmc_fit(cfg: Config):
             # print('state:', state)
             # input()
             state, stats = vvmc_fit_training_step(state, subkey)        
-
+            # jax.debug.print('v={} v.s. {}', stats['prediction'][0][0], stats['target'][0][0])
             writer.log(
                 step=str(step),
                 pmove=f"{pmove[0]:.2f}",
@@ -206,7 +206,6 @@ def vvmc_reverse_fit(cfg: Config):
             state = update_from_walker_state(state, walker_state)
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             state, stats = vvmc_fit_training_step(state, subkey)        
-
             # writer.log(
             #     step=str(step),
             #     pmove=f"{pmove[0]:.2f}",

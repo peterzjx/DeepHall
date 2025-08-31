@@ -18,32 +18,45 @@ from jax import numpy as jnp
 
 def extract_electron_pairs(electron):
     Ne = electron.shape[0]
-    
-    # Create all possible pairs (including self-pairs)
-    ei = jnp.repeat(electron[:, None, :], Ne, axis=1)  # shape: [Ne, Ne, 2]
-    ej = jnp.repeat(electron[None, :, :], Ne, axis=0)  # shape: [Ne, Ne, 2]
+    # indices for anchors and partners
+    anchors = jnp.arange(Ne)[:, None]                  # shape [Ne, 1]
+    partners = (anchors + jnp.arange(1, Ne)) % Ne      # shape [Ne, Ne-1]
 
-    # Create indices for non-diagonal elements
-    # For each electron i, we want pairs with all electrons j != i
-    # We can do this by creating a list of indices for each i
-    indices = []
-    for i in range(Ne):
-        # For electron i, get all j != i
-        j_indices = jnp.concatenate([jnp.arange(i), jnp.arange(i+1, Ne)])
-        indices.append(j_indices)
+    # gather coordinates
+    z_anchor = electron[anchors]       # shape [Ne, 1, 2]
+    z_partner = electron[partners]     # shape [Ne, Ne-1, 2]
+
+    # broadcast to build pairs
+    pairs = jnp.stack([jnp.broadcast_to(z_anchor, z_partner.shape),
+                      z_partner], axis=-2)  # shape [Ne, Ne-1, 2, 2]
+    return pairs
+    # Ne = electron.shape[0]
     
-    # Stack the indices for all electrons
-    all_indices = jnp.stack(indices)  # shape: [Ne, Ne-1]
+    # # Create all possible pairs (including self-pairs)
+    # ei = jnp.repeat(electron[:, None, :], Ne, axis=1)  # shape: [Ne, Ne, 2]
+    # ej = jnp.repeat(electron[None, :, :], Ne, axis=0)  # shape: [Ne, Ne, 2]
+
+    # # Create indices for non-diagonal elements
+    # # For each electron i, we want pairs with all electrons j != i
+    # # We can do this by creating a list of indices for each i
+    # indices = []
+    # for i in range(Ne):
+    #     # For electron i, get all j != i
+    #     j_indices = jnp.concatenate([jnp.arange(i), jnp.arange(i+1, Ne)])
+    #     indices.append(j_indices)
     
-    # Use advanced indexing to get the pairs
-    # For each electron i, get the pairs with electrons j != i
-    ei_pairs = jnp.take_along_axis(ei, all_indices[:, :, None], axis=1)  # shape: [Ne, Ne-1, 2]
-    ej_pairs = jnp.take_along_axis(ej, all_indices[:, :, None], axis=1)  # shape: [Ne, Ne-1, 2]
+    # # Stack the indices for all electrons
+    # all_indices = jnp.stack(indices)  # shape: [Ne, Ne-1]
     
-    # Stack the pairs along the last axis
-    pairs = jnp.stack([ei_pairs, ej_pairs], axis=-2)  # shape: [Ne, Ne-1, 2, 2]
+    # # Use advanced indexing to get the pairs
+    # # For each electron i, get the pairs with electrons j != i
+    # ei_pairs = jnp.take_along_axis(ei, all_indices[:, :, None], axis=1)  # shape: [Ne, Ne-1, 2]
+    # ej_pairs = jnp.take_along_axis(ej, all_indices[:, :, None], axis=1)  # shape: [Ne, Ne-1, 2]
     
-    return pairs  # shape: [Ne, Ne-1, 4]
+    # # Stack the pairs along the last axis
+    # pairs = jnp.stack([ei_pairs, ej_pairs], axis=-2)  # shape: [Ne, Ne-1, 2, 2]
+    
+    # return pairs  # shape: [Ne, Ne-1, 4]
 
 def extract_zizj_env(z: jnp.ndarray):
     """
@@ -71,16 +84,14 @@ def extract_zizj_env(z: jnp.ndarray):
     return pair_idx, pairs, env
 
 class AttentionVelocityNet(nn.Module):
-    d_model: int = 64        # hidden size, pair_wise_feat & env_feat dim
+    d_model: int = 64
     num_heads: int = 4
-
+    num_layers: int = 2   # number of attention-fusion blocks
+    num_MLP_layers: int = 4 # number of attention-fusion blocks
     @nn.compact
     def __call__(self, zij, E):
-        """
-        zij: complex pair [zi, zj]
-        E: 1D array of complex environment electrons
-        """
         Ne = E.shape[0]
+
         # ---- 1. Encode zi, zj ----
         zi, zj = zij[..., 0], zij[..., 1]
         pair_feat = jnp.stack([
@@ -88,47 +99,62 @@ class AttentionVelocityNet(nn.Module):
             jnp.real(zj), jnp.imag(zj),
             jnp.real(zi - zj), jnp.imag(zi - zj),
             jnp.real(zi + zj), jnp.imag(zi + zj),
-        ])  # shape (6,)
-
+        ])
         pair_feat = nn.Dense(self.d_model)(pair_feat)
 
         # ---- 2. Encode environment ----
         env_feat = jnp.stack([jnp.real(E), jnp.imag(E)], axis=-1)  # (Ne-2, 2)
         env_feat = nn.Dense(self.d_model)(env_feat)
 
-        # Apply attention: query = pair, key/value = environment
-        query = pair_feat[None, None, :]      # shape (1, 1, d_model)
+        # Query from pair
+        query = pair_feat[None, None, :]  # shape (1,1,d_model)
 
-        attn_re = nn.MultiHeadDotProductAttention(
-            num_heads=self.num_heads,
-            qkv_features=self.d_model,
-            out_features=self.d_model
-        )(query, env_feat[None, :, :], env_feat[None, :, :])
-        attn_re = jnp.squeeze(attn_re)  # (1, d_model) → (d_model,)
-        # ---- 3. Fuse pair + attention ----
-        fused_re = jnp.concatenate([pair_feat, attn_re])
-        fused_re = nn.sigmoid(nn.Dense(self.d_model)(fused_re))
-        # ---- 4. Predict displacement ----
-        out = nn.Dense(Ne * 2)(fused_re)  
-        velocity_re = jnp.tanh(out)
-        velocity_re = velocity_re.reshape([Ne, 2])
+        # Initialize features
+        feat_re, feat_im = pair_feat, pair_feat
 
-        attn_im = nn.MultiHeadDotProductAttention(
-            num_heads=self.num_heads,
-            qkv_features=self.d_model,
-            out_features=self.d_model
-        )(query, env_feat[None, :, :], env_feat[None, :, :])
-        attn_im = jnp.squeeze(attn_im)  # (1, d_model) → (d_model,)
-        # ---- 3. Fuse pair + attention ----
-        fused_im = jnp.concatenate([pair_feat, attn_im])
-        fused_im = nn.sigmoid(nn.Dense(self.d_model)(fused_im))
-        # ---- 4. Predict displacement ----
-        out = nn.Dense(Ne * 2)(fused_im)
-        velocity_im = nn.sigmoid(out)
-        velocity_im = velocity_im.reshape([Ne, 2])
+        # ---- 3. Multi-layer stack ----
+        for _ in range(self.num_layers):
+            attn_re = nn.MultiHeadDotProductAttention(
+                num_heads=self.num_heads,
+                qkv_features=self.d_model,
+                out_features=self.d_model,
+            )(query, env_feat[None, :, :], env_feat[None, :, :])
+            attn_re = jnp.squeeze(attn_re)
 
-        velocity = velocity_re + 1j * velocity_im # [[v1x, v1y], [v2x, v2y],...,[vNx, vNy]]~[Ne, 2], complex value
+            fused_re = jnp.concatenate([feat_re, attn_re])
+            # fused_re = nn.sigmoid(nn.Dense(self.d_model)(fused_re))
+            # feat_re = fused_re  # carry to next layer
+            for _ in range(self.num_MLP_layers):
+                fused_re = nn.Dense(self.d_model)(fused_re)
+                fused_re = nn.gelu(fused_re)   # or relu/sigmoid/tanh
+
+
+            attn_im = nn.MultiHeadDotProductAttention(
+                num_heads=self.num_heads,
+                qkv_features=self.d_model,
+                out_features=self.d_model,
+            )(query, env_feat[None, :, :], env_feat[None, :, :])
+            attn_im = jnp.squeeze(attn_im)
+
+            fused_im = jnp.concatenate([feat_im, attn_im])
+            # fused_im = nn.sigmoid(nn.Dense(self.d_model)(fused_im))
+            # feat_im = fused_im  # carry to next layer
+            for _ in range(self.num_MLP_layers):
+                fused_im = nn.Dense(self.d_model)(fused_im)
+                fused_im = nn.gelu(fused_im)   # or relu/sigmoid/tanh
+
+        # ---- 4. Output projection ----
+        # out_re = nn.Dense(Ne * 2)(feat_re)
+        # velocity_re = jnp.tanh(out_re).reshape([Ne, 2])
+        velocity_re = nn.Dense(2)(feat_re)
+
+        # out_im = nn.Dense(Ne * 2)(feat_im)
+        # velocity_im = nn.sigmoid(out_im).reshape([Ne, 2])
+        velocity_im = nn.Dense(2)(feat_im)
+
+        velocity = velocity_re + 1j * velocity_im
         return velocity
+
 
 class DipoleLaughlinVelocity(nn.Module):
     """Create drift velocity for the Laughlin wavefunction."""
@@ -195,9 +221,17 @@ class DipoleLaughlinVelocity(nn.Module):
             in_axes=(0, 0)                                          # outer vmap over axis=0
         )
         cpx_vij_both = get_vij(cpx_zij_pairs, cpx_z_stack)  # shape (N, 2, ...)
-        print("cpx_zij_pairs, cpx_z_stack", cpx_zij_pairs.shape, cpx_z_stack.shape)
-        atten_v2 = jnp.sum(cpx_vij_both, axis=(0,1))
-        # print('cpx_vij_both shape', cpx_vij_both.shape, atten_v2.shape)
+        # def reorder(outputs):
+        #     Ne = outputs.shape[0]
+        #     # build cyclic indices
+        #     idx = (jnp.arange(Ne)[None, None, :, None] + jnp.arange(Ne)[:, None, None, None]) % Ne
+        #     # idx shape: (Ne, 1, Ne, 1) -> broadcasts to outputs
+        #     return jnp.take_along_axis(outputs, idx, axis=2)
+        # ordered_cpx_vij_both = reorder(cpx_vij_both)
+        # atten_v2 = jnp.sum(ordered_cpx_vij_both, axis=(0,1))
+        # print("cpx_zij_pairs, cpx_z_stack", cpx_zij_pairs.shape, cpx_z_stack.shape,cpx_vij_both.shape)
+        atten_v2 = jnp.sum(cpx_vij_both, axis = (1,))
+        print('cpx_vij_both shape', cpx_vij_both.shape, atten_v2.shape)
         # jax.debug.print("attention v = {}", atten_v2[0])
         drift_v = v1 + 1 * integer_v2  +  2 * atten_v2
         return drift_v
