@@ -23,8 +23,20 @@ def DumpLarge(y, cutoff=100):
 
 for file_name in sys.argv[1:]:
     df = pd.read_csv(file_name)
-    x0 = df["step"]
-    x0 = range(len(x0))
+
+    # Choose the column you want to filter outliers from, e.g. "energy"
+    col = "energy"
+    mean = df[col].mean()
+    std = df[col].std()
+
+    # Keep only rows where the value is within 5σ of the mean
+    df = df[np.abs(df[col] - mean) <= 20 * std]
+
+    # After filtering, reset the index if you want
+    df = df.reset_index(drop=True)
+
+    # Extract columns
+    x0 = range(len(df))       # steps renumbered
     y0 = df["energy"]
     y1 = df["potential"]
     y2 = df["kinetic"]

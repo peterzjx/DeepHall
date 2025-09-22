@@ -280,3 +280,31 @@ def make_vvmc_fit_loss_fn(
         return stats, gradients
     
     return loss_and_grad
+
+def make_vmc_fit_loss_fn(
+    network: LogPsiNetwork, system: System, mode: LossMode = LossMode.FUNCTION_OVLP
+) -> Callable[[ArrayTree, tuple[jnp.ndarray, jnp.ndarray]], tuple[dict, jnp.ndarray]]:
+    def loss_and_grad(params: ArrayTree, data_and_targets: tuple[jnp.ndarray, jnp.ndarray]):
+        x_data, y_targets = data_and_targets
+        
+        # Compute predictions for all x_data
+        predictions = jax.vmap(lambda x: network(params, x))(x_data)
+        # jax.debug.print("Predictions v.s. Target: {} v.s. {}", predictions[0], y_targets[0])
+        # Compute MSE between predictions and targets
+        squared_errors = jnp.abs(predictions - y_targets)**2
+        loss_value = jnp.mean(squared_errors)
+        
+        # Compute gradients
+        gradients = jax.grad(lambda p: jnp.mean(jnp.abs(jax.vmap(lambda x: network(p, x))(x_data) - y_targets)**2))(params)
+        # jax.debug.print("Gradient: {}", gradients)
+        # jax.debug.print("parameters {}", params)
+        # Create stats dictionary
+        stats = {
+            "loss": loss_value,
+            "target": y_targets,
+            "prediction": predictions
+        }
+        
+        return stats, gradients
+    
+    return loss_and_grad

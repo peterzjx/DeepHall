@@ -64,22 +64,48 @@ def initalize_state(cfg: Config, model: nn.Module):
         model.init(key_params, data[0, 0])
     )
     mcmc_width = kfac_jax.utils.replicate_all_local_devices(jnp.asarray(cfg.mcmc.width))
-    if cfg.mcmc.use_dmc == False:
+    if cfg.mcmc.use_dmc == False and cfg.mcmc.use_vmc_pretrain == False:
         return 0, CheckpointState(params, data, None, mcmc_width)
-    else:
+    elif cfg.mcmc.use_dmc == True:
         walker_state = WalkerState(
             electrons=data,
         )
         return 0, DMCCheckpointState(params, walker_state, None)
+    elif cfg.mcmc.use_vmc_pretrain == True:
+        coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
+        coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
+        walker_state = DMCCheckpointState(
+            params=params,
+            electrons=coords,
+            electrons_xy=None,
+            electrons_xy_move=None,
+            d_metric=None,
+            last_v=None,
+            v=None,
+            lnpsi=jnp.zeros(coords.shape[:-2]),
+            local_energy=None,  # TODO: calculate local energy
+            weights=None,
+            dmc_mean_energy=None,
+            dmc_run_step=None,
+            opt_state=None
+        )
+        return 0, walker_state
 
 
 def setup_mcmc(cfg: Config, network: LogPsiNetwork):
     batch_network = jax.vmap(network, in_axes=(None, 0))
-    mcmc_step = mcmc.make_mcmc_step(
-        batch_network,
-        batch_per_device=cfg.batch_size // jax.device_count(),
-        steps=cfg.mcmc.steps,
-    )
+    if cfg.mcmc.use_vmc_pretrain:
+        mcmc_step = mcmc.make_vmc_step(
+            batch_network,
+            batch_per_device=cfg.batch_size // jax.device_count(),
+            steps=cfg.mcmc.steps,
+        )
+    else:    
+        mcmc_step = mcmc.make_mcmc_step(
+            batch_network,
+            batch_per_device=cfg.batch_size // jax.device_count(),
+            steps=cfg.mcmc.steps,
+        )
     pmap_mcmc_step = constants.pmap(mcmc_step, donate_argnums=1)
     pmoves = np.zeros(cfg.mcmc.adapt_frequency)
     return pmap_mcmc_step, pmoves

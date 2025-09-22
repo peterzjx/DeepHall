@@ -57,7 +57,7 @@ class AttentionVelocityNet(nn.Module):
             feature_im = nn.Dense(self.d_mlp_model)(feature_im)
             feature_im = nn.sigmoid(feature_im)   # or relu/sigmoid/tanh
         velocity_im = nn.Dense(2)(feature_im)
-        velocity = (velocity_re + 1j * velocity_im) * jnp.exp(-0.02 * (jnp.abs(zi)**2 + jnp.abs(zj)**2))
+        velocity = (velocity_re + 1j * velocity_im) * jnp.exp(-0.03 * (jnp.abs(zi)**2 + jnp.abs(zj)**2))
         return velocity
 
 

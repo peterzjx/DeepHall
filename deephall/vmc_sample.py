@@ -31,10 +31,7 @@ from deephall.config import Config, OptimizerName
 from deephall.log import LogManager, init_logging
 from deephall.types import LogPsiNetwork,WalkerState,CheckpointState, DMCCheckpointState
 from deephall.loss import LossMode, make_loss_fn
-from deephall.velocity_networks import make_v_network
-from deephall.vvmc import vvmc
 from chex import ArrayTree
-import deephall.vvmc.velocity_utils as v_utils
 from pathlib import Path
 from upath import UPath
 from jax import lax
@@ -62,17 +59,8 @@ def initalize_state(cfg: Config, model: nn.Module):
     key_data, key_params = jax.random.split(jax.random.PRNGKey(cfg.seed))
     coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
     coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
-    ##############################################################################
-    # theta = jnp.array([1.6856816, 2.4018655, 1.5067337, 0.42490557])
-    # phi = jnp.array([-2.8268971, -2.2615817, -0.6118226, -2.640316])
-    # electrons = jnp.stack([theta, phi], axis=-1)  # shape: (Ne, 2)
-    # coords = jnp.stack([electrons] * jax.device_count(), axis=0)[:, jnp.newaxis, :, :]
-    # print('xxx', coords.shape)
-    ##############################################################################
     v_0 = jnp.ones_like(coords, dtype=jnp.complex64)
     logpsi_0 = jnp.zeros(coords.shape[:-2])
-    print('init shape', coords.shape, v_0.shape, logpsi_0.shape)
-    print('device #', jax.devices(), jax.device_count())
 
     d_0 = v_utils.calculate_d_metric_xy(coords, _2Q=cfg.system.flux)
     
@@ -135,7 +123,7 @@ def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCC
         dmc_run_step=jnp.zeros_like(logpsi_0),
         opt_state=None
     )
-    return step, dmc_state
+        return step, dmc_state
 
 def setup_mcmc(cfg: Config, network: LogPsiNetwork):
     # NOTE: we will takek batch_grad_fn inside, so we only need to pass the non-batched network

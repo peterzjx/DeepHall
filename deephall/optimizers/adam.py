@@ -129,3 +129,39 @@ def make_adam_training_vvmc_fit_step(
             )
 
     return init, step
+
+def make_adam_training_vmc_fit_step(
+    optim_cfg: OptimizerAdam, loss_grad_fn
+) -> tuple[TrainingInit, TrainingStep]:
+    # def val_and_grad(params, dat_and_dR):
+    #     stats, grads = loss_grad_fn(params, dat_and_dR)
+    #     return (stats["energy"], stats), grads
+
+    tx = optax.adam(learning_rate=optim_cfg.lr.schedule)
+    gradient_accumulation_steps = optim_cfg.gradient_accumulation_steps
+    tx = optax.MultiSteps(tx, gradient_accumulation_steps)
+
+
+    @constants.pmap
+    def init(params, key, data):
+        del key, data
+        return tx.init(params)
+
+    @constants.pmap
+    def step(state: DMCCheckpointState, key: PRNGKey):
+        del key
+        params, electons, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
+        stats, grads = loss_grad_fn(params, (electons, lnpsi))
+        updates, opt_state = tx.update(grads, opt_state, params)
+        # jax.debug.print('Grads {}', grads['params']['Orbitals_0']['featured_orbitals']['DenseGeneral_0']['kernel'][0][0][0])
+        # jax.debug.print('updates {}', updates['params']['Orbitals_0']['featured_orbitals']['DenseGeneral_0']['kernel'][0][0][0])
+        # jax.debug.print('Before params:{}',state.params['params']['Orbitals_0']['featured_orbitals']['DenseGeneral_0']['kernel'][0][0][0])
+        params = optax.apply_updates(params, updates)
+        
+        stats['gradient'] = grads
+        return (
+            DMCCheckpointState(params, electons, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
+            stats
+            )
+
+    return init, step

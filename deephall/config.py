@@ -99,6 +99,7 @@ class NetworkType(StrEnum):
 class FermionicType(StrEnum):
     pfaffian = "pfaffian"
     product = "product"  # arXiv:2205.13205
+    pfaffian_backflow = "pfaffian_backflow"  # backflow from cls attended feature
 
 class OrbitalType(StrEnum):
     full = "full"
@@ -153,7 +154,10 @@ class MCMC:
     "Number of steps after which to update the adaptive MCMC step size."
 
     use_dmc: bool = False
-    "Whether to use DMC instead of MCMC."
+    "Whether to use DMC"
+
+    use_vmc_pretrain: bool = False
+    "Whether to use VMC-pretrain"
 
 
 @dataclass

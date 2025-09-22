@@ -39,17 +39,14 @@ class PsiformerLayers(nn.Module):
     def __call__(self, electrons: jnp.ndarray, spins: jnp.ndarray):
         theta, phi = electrons[..., 0], electrons[..., 1]
         h_one = self.input_feature(theta, phi, spins)
-        print('feat->hone shape', h_one.shape)
         attention_dim = self.num_heads * self.heads_dim
         h_one = nn.Dense(attention_dim, use_bias=False)(h_one)
-        print('h_one Dense shape', h_one.shape)
         for _ in range(self.num_layers):
             attn_out = nn.MultiHeadAttention(num_heads=self.num_heads)(h_one)
             h_one += nn.Dense(attention_dim, use_bias=False)(attn_out)
             h_one = nn.LayerNorm(epsilon=1e-5)(h_one)
             h_one += nn.tanh(nn.Dense(attention_dim)(h_one))
             h_one = nn.LayerNorm(epsilon=1e-5)(h_one)
-        print('h_one shape after', h_one.shape)
         return h_one
 
     def input_feature(self, theta: jnp.ndarray, phi: jnp.ndarray, spins: jnp.ndarray):

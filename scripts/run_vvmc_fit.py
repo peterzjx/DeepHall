@@ -21,9 +21,9 @@ if __name__=="__main__":
     config.system.tau = 0.0001
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
-    config.optim.iterations = 50000
+    config.optim.iterations = 20000
     config.optim.optimizer = OptimizerName.adam
-    config.batch_size = 1024
+    config.batch_size = 512
     config.mcmc.width = 0.3
     config.initial_energy = 0.0
     

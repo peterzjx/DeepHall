@@ -55,7 +55,6 @@ def deduplicate(self: CheckpointState):
         self.mcmc_width[0],
     )
 def dmc_deduplicate(self: DMCCheckpointState):
-    assert self.electrons.ndim == 4, "data has wrong shape to deduplicate"
     return CheckpointState(
         dedup_pytree(self.params),
         self.electrons.reshape(-1, *self.electrons.shape[2:]),

@@ -149,6 +149,53 @@ def make_mcmc_step(
 
     return mcmc_step
 
+def make_vmc_step(
+    batch_network: LogPsiNetwork, batch_per_device: int, steps: int = 10
+):
+    """Creates the MCMC step function.
+
+    Args:
+      batch_network: function, signature (params, x), which evaluates the log of
+        the wavefunction (square root of the log probability distribution) at x
+        given params. Inputs and outputs are batched.
+      batch_per_device: Batch size per device.
+      steps: Number of MCMC moves to attempt in a single call to the MCMC step
+        function.
+
+    Returns:
+      Callable which performs the set of MCMC steps.
+    """
+
+    @jax.jit
+    def mcmc_step(
+        params: ArrayTree, data: jnp.ndarray, key: PRNGKey, width: jnp.ndarray = 0.3
+    ):
+        """Performs a set of MCMC steps.
+
+        Args:
+          params: parameters to pass to the network.
+          data: (batched) MCMC configurations to pass to the network.
+          key: RNG state.
+          width: standard deviation to use in the move proposal.
+
+        Returns:
+          (data, pmove), where data is the updated MCMC configurations, key the
+          updated RNG state and pmove the average probability a move was accepted.
+        """
+
+        def step_fn(i, x):
+            return mh_update(params, batch_network, *x, stddev=width)
+        log_wfn = batch_network(params, data)
+        logprob = 2.0 * log_wfn.real
+        data, key, _, num_accepts = lax.fori_loop(
+            0, steps, step_fn, (data, key, logprob, 0.0)
+        )
+        log_wfn = batch_network(params, data)
+        pmove = jnp.sum(num_accepts) / (steps * batch_per_device)
+        pmove = constants.pmean(pmove)
+        return data, log_wfn, pmove
+
+    return mcmc_step
 
 def update_mcmc_width(
     t: int,
