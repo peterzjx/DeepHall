@@ -20,9 +20,9 @@ for Ne in [4]:
         config.system.nspins = (Ne, 0)
         config.system.flux = twoQ
         config.optim.optimizer = OptimizerName.adam
-        config.optim.adam.gradient_accumulation_steps = 10
+        # config.optim.adam.gradient_accumulation_steps = 10
         config.optim.iterations  = 100000
-        config.batch_size = 1024
+        config.batch_size = 128
         config.mcmc.width = 0.5
         # config.log.pretrained_path = f"../tasks/psiformer_N{Ne}_kappa{kappa}/ckpt_{config.optim.iterations-1:07d}.npz"
         # config.log.pretrained_path = "../logs/psiformer_laughlin_fit/ckpt_019999.npz"

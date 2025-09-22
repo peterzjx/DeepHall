@@ -246,6 +246,10 @@ class LogManager:
         with ckpt_path.open("rb") as npf, np.load(npf, allow_pickle=True) as f:
             step = f["step"].tolist() + 1
             state = reduplicate(
+                # TODO: f["opt_state"] sometimes will be a serialized MultiStepsState,
+                # need to convert it to an object instead of a list
+                # TODO: change the signature of CheckpointState to allow
+                # opt_state to be a MultiStepsState
                 CheckpointState(
                     f["params"].tolist(),
                     f["data"],
