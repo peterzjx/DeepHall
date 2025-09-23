@@ -39,7 +39,7 @@ if __name__=="__main__":
     config.system.interaction_strength = 1.0
     config.optim.iterations = 20000
     config.optim.optimizer = OptimizerName.adam
-    config.optim.adam.gradient_accumulation_steps = 10
+    config.optim.adam.gradient_accumulation_steps = 4
     config.optim.adam.lr.rate = 1e-5
     config.batch_size = 1024
     config.mcmc.use_vmc_pretrain = True
@@ -47,8 +47,8 @@ if __name__=="__main__":
     config.initial_energy = 0.0
     
     config.log.save_step_interval = 100
+    # config.log.pretrained_path = "../logs/psiformer_laughlin_fit/ckpt_001352.npz"
     config.log.save_path = "../logs/psiformer_laughlin_fit"
     config.mcmc.burn_in = 500
 
-    config.log.pretrained_path = None
     vmc_fit.vmc_fit(laughlin_config, config)

@@ -48,7 +48,7 @@ if __name__=="__main__":
     
     config.log.save_step_interval = 100
     # config.log.pretrained_path = "../logs/super_laughlin_v_fit/ckpt_001999.npz"
-    config.log.pretrained_path = "../logs/dipole_laughlin_v_fit/ckpt_019999.npz"
+    config.log.pretrained_path = f"../logs/dipole_laughlin_v_fit/ckpt_{500 - 1 :06d}.npz"
     config.log.save_path = f"../logs/dipole_laughlin_v_train_k{config.system.interaction_strength}"
     config.mcmc.burn_in = 5000
 

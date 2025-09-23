@@ -21,20 +21,19 @@ if __name__=="__main__":
     config.system.tau = 0.0001
     config.system.interaction_strength = 1.0
     config.system.kappa_tau = config.system.tau * config.system.interaction_strength
-    config.optim.iterations = 20000
+    config.optim.iterations = 1000
     config.optim.optimizer = OptimizerName.adam
     config.batch_size = 512
     config.mcmc.width = 0.3
     config.initial_energy = 0.0
     
-    config.log.save_step_interval = 100
+    config.log.save_step_interval = 500
     config.log.save_path = "../logs/dipole_laughlin_v_fit"
     config.mcmc.burn_in = 500
 
     config.log.pretrained_path = None
-    vvmc_fit.vvmc_fit(config)
-    # vvmc_fit.vvmc_reverse_fit(config)
-    config.log.pretrained_path = f"../logs/dipole_laughlin_v_fit/ckpt_0{config.optim.iterations -1}.npz"
+    # vvmc_fit.vvmc_fit(config)
+    config.log.pretrained_path = f"../logs/dipole_laughlin_v_fit/ckpt_{config.optim.iterations - 1 :06d}.npz"
     for it in range(2):
         vvmc_fit.vvmc_reverse_fit(config)
         vvmc_fit.vvmc_fit(config)

@@ -34,7 +34,8 @@ from deephall.types import CheckpointState, DMCCheckpointState, WalkerState, get
 from deephall.loss import LossMode, make_loss_fn
 from deephall.networks import make_network
 from deephall.types import LogPsiNetwork
-from deephall.train import init_guess, setup_mcmc, initalize_state
+from deephall.train import init_guess, setup_mcmc
+from deephall.vmc_sample import initalize_state, restore_checkpoint
 from pathlib import Path
 from upath import UPath
 logger = logging.getLogger("deephall")
@@ -53,23 +54,25 @@ def vmc_fit(laughlin_cfg: Config, cfg: Config):
         
     pmap_mcmc_step, pmove = setup_mcmc(laughlin_cfg, laughlin_network)
     print('initial setup_mcmc done', pmap_mcmc_step)
-    
-    initial_step, state = (
-        initalize_state(cfg, model)
-    )
+    if cfg.log.pretrained_path is not None:
+        print('Restoring from pretrained path:', cfg.log.pretrained_path)
+        initial_step, state = (
+            initalize_state(cfg, model)
+        )
+        _, state = (
+            restore_checkpoint(cfg, cfg.log.pretrained_path)
+        )
+    else:
+        print('Training from scratch')
+        initial_step, state = (
+            initalize_state(cfg, model)
+        )
     print('initial initalize_state done', state._fields)
     walker_state = get_walker_state(state) #WalkerState
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
 
     opt_init, vmc_fit_training_step = optimizers.make_optimizer_vmc_fit_step(cfg, network)
-
-    if (
-        cfg.optim.optimizer == OptimizerName.none
-        and cfg.log.restore_path is not None
-        and cfg.log.restore_path != cfg.log.save_path
-    ):  # Reset steps because inference run is another run
-        initial_step = 0
 
     if state.opt_state is None:
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)

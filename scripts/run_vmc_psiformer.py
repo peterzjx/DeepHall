@@ -21,11 +21,9 @@ for Ne in [4]:
         config.system.flux = twoQ
         config.optim.optimizer = OptimizerName.adam
         # config.optim.adam.gradient_accumulation_steps = 10
-        config.optim.iterations  = 100000
+        config.optim.iterations  = 1000
         config.batch_size = 128
-        config.mcmc.width = 0.5
-        # config.log.pretrained_path = f"../tasks/psiformer_N{Ne}_kappa{kappa}/ckpt_{config.optim.iterations-1:07d}.npz"
-        # config.log.pretrained_path = "../logs/psiformer_laughlin_fit/ckpt_019999.npz"
-        # config.log.save_path = f"{timestamp}_pfaffian_{Ne}_kappa_{kappa}"
+        config.mcmc.width = 0.3
+        # config.log.pretrained_path = f"../logs/psiformer_laughlin_fit/ckpt_001637.npz"
         config.log.save_path = f"../logs/from_pretrain_psiformer_{Ne}_kappa_{kappa}"
         train(config)

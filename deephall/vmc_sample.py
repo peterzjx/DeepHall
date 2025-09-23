@@ -35,57 +35,9 @@ from chex import ArrayTree
 from pathlib import Path
 from upath import UPath
 from jax import lax
+from deephall.train import initalize_state, init_guess
 logger = logging.getLogger("deephall")
 
-
-def init_guess(key: PRNGKey, batch: int, nelec: int):
-    """Create uniform samples on the sphere.
-
-    Args:
-        key: random key.
-        batch: number of samples to generate.
-        nelec: number of electrons.
-
-    Returns:
-        Electron coordinates of shape [batch, nelec, 2]
-    """
-    key1, key2 = jax.random.split(key)
-    theta = jnp.arccos(jax.random.uniform(key1, (batch, nelec), minval=-1, maxval=1))
-    phi = jax.random.uniform(key2, (batch, nelec), minval=-jnp.pi, maxval=jnp.pi)
-    return jnp.stack([theta, phi], axis=-1)
-
-
-def initalize_state(cfg: Config, model: nn.Module):
-    key_data, key_params = jax.random.split(jax.random.PRNGKey(cfg.seed))
-    coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
-    coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
-    v_0 = jnp.ones_like(coords, dtype=jnp.complex64)
-    logpsi_0 = jnp.zeros(coords.shape[:-2])
-
-    d_0 = v_utils.calculate_d_metric_xy(coords, _2Q=cfg.system.flux)
-    
-    # Create walker state before replication
-    
-    # Initialize and replicate parameters
-    params = model.init(key_params, coords[0, 0])
-
-    dmc_state = DMCCheckpointState(
-        params=kfac_jax.utils.replicate_all_local_devices(params),
-        electrons=coords,
-        electrons_xy=coords,
-        electrons_xy_move=jnp.zeros_like(coords),
-        d_metric=d_0,
-        last_v=v_0,
-        v=v_0,
-        lnpsi=logpsi_0,
-        local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
-        weights=jnp.ones_like(logpsi_0),
-        dmc_mean_energy=jnp.ones_like(logpsi_0)*cfg.initial_energy,
-        dmc_run_step=jnp.zeros_like(logpsi_0),
-        opt_state=None
-    )
-
-    return 0, dmc_state
 
 def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCCheckpointState]:
     """Resore a given checkpoint.
@@ -100,43 +52,27 @@ def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCC
     key_data, key_params = jax.random.split(jax.random.PRNGKey(cfg.seed))
     coords = init_guess(key_data, cfg.batch_size, sum(cfg.system.nspins))
     coords = coords.reshape((jax.device_count(), -1, *coords.shape[-2:]))
-    v_0 = jnp.ones_like(coords, dtype=jnp.complex64)
-    logpsi_0 = jnp.zeros(coords.shape[:-2])
-    d_0 = v_utils.calculate_d_metric_xy(coords, cfg.system.flux)
     
     with ckpt_path.open("rb") as npf, np.load(npf, allow_pickle=True) as f:
         step = f["step"].tolist() + 1
         params = f["params"].tolist()
         # logger.info("Restored checkpoint %s", ckpt_path)
         dmc_state = DMCCheckpointState(
-        params=kfac_jax.utils.replicate_all_local_devices(params),
-        electrons=coords,
-        electrons_xy=coords,
-        electrons_xy_move=jnp.zeros_like(coords),
-        d_metric=d_0,
-        last_v=v_0,
-        v=v_0,
-        lnpsi=logpsi_0,
-        local_energy=jnp.zeros_like(logpsi_0),  # TODO: calculate local energy
-        weights=jnp.ones_like(logpsi_0),
-        dmc_mean_energy=jnp.zeros_like(logpsi_0),
-        dmc_run_step=jnp.zeros_like(logpsi_0),
-        opt_state=None
-    )
+            params=params,
+            electrons=coords,
+            electrons_xy=None,
+            electrons_xy_move=None,
+            d_metric=None,
+            last_v=None,
+            v=None,
+            lnpsi=jnp.zeros(coords.shape[:-2]),
+            local_energy=None,  # TODO: calculate local energy
+            weights=None,
+            dmc_mean_energy=None,
+            dmc_run_step=None,
+            opt_state=None
+        )
         return step, dmc_state
-
-def setup_mcmc(cfg: Config, network: LogPsiNetwork):
-    # NOTE: we will takek batch_grad_fn inside, so we only need to pass the non-batched network
-    mcmc_step = vvmc.make_vvmc_step(
-        cfg.system,
-        network,
-        batch_per_device=cfg.batch_size // jax.device_count(),
-        steps=1 # VVMC uses small-step detailed-balance approximation, which requires matching \Delta X and X, i.e., steps = 1
-    )
-    
-    pmap_mcmc_step = constants.pmap(mcmc_step, donate_argnums=1)
-    pmoves = np.zeros(cfg.mcmc.adapt_frequency)
-    return pmap_mcmc_step, pmoves
 
 @jax.jit
 def weighted_mean_energy(walker_state: WalkerState):

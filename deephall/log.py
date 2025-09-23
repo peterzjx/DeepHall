@@ -59,7 +59,7 @@ def dmc_deduplicate(self: DMCCheckpointState):
         dedup_pytree(self.params),
         self.electrons.reshape(-1, *self.electrons.shape[2:]),
         np.asarray(dedup_pytree(self.opt_state), dtype="object"),
-        0.3,
+        0.3, #dummy value
     )
 
 def reduplicate(self: CheckpointState):
@@ -246,15 +246,18 @@ class LogManager:
         with ckpt_path.open("rb") as npf, np.load(npf, allow_pickle=True) as f:
             step = f["step"].tolist() + 1
             state = reduplicate(
+                # In the normal case, f["opt_state"] is of the type Optimizer.State(xxx)
+                # In the adam case with multisteps, f["opt_state"] is of the type [array, array, ScaleByAdamState(...)]
+
                 # TODO: f["opt_state"] sometimes will be a serialized MultiStepsState,
                 # need to convert it to an object instead of a list
                 # TODO: change the signature of CheckpointState to allow
                 # opt_state to be a MultiStepsState
                 CheckpointState(
-                    f["params"].tolist(),
-                    f["data"],
-                    f["opt_state"].tolist(),
-                    f["mcmc_width"],
+                    params=f["params"].tolist(),
+                    data=f["data"],
+                    opt_state=f["opt_state"].tolist(),
+                    mcmc_width=f["mcmc_width"],
                 )
             )
             logger.info("Restored checkpoint %s", ckpt_path)
