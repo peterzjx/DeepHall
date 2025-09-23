@@ -192,6 +192,7 @@ class LogManager:
         with (self.save_path / "config.yml").open("w") as f:
             f.writelines(current_config_yaml)
 
+    # TODO: save_checkpoint support DMCCheckpointState
     def save_checkpoint(self, step: int, state: CheckpointState) -> None:
         ckpt_path = self.save_path / f"ckpt_{step:06d}.npz"
         logger.info("Saving checkpoint %s", ckpt_path)
@@ -223,7 +224,7 @@ class LogManager:
         if not self.pretrained_path.exists():
             return None
         if self.pretrained_path.is_file():
-            return self.restore_checkpoint(self.pretrained_path)
+            return self.restore_checkpoint(self.pretrained_path, keep_opt_state=False)
         for ckpt_path in sorted(self.pretrained_path.glob("ckpt_*.npz"), reverse=True):
             ckpt_path = cast(UPath, ckpt_path)
             try:
@@ -233,7 +234,7 @@ class LogManager:
         return None
 
     @staticmethod
-    def restore_checkpoint(ckpt: str | Path | UPath) -> tuple[int, CheckpointState]:
+    def restore_checkpoint(ckpt: str | Path | UPath, keep_opt_state: bool = True) -> tuple[int, CheckpointState]:
         """Resore a given checkpoint.
 
         Args:
@@ -256,7 +257,7 @@ class LogManager:
                 CheckpointState(
                     params=f["params"].tolist(),
                     data=f["data"],
-                    opt_state=f["opt_state"].tolist(),
+                    opt_state=f["opt_state"].tolist() if keep_opt_state else None,
                     mcmc_width=f["mcmc_width"],
                 )
             )

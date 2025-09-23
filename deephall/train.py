@@ -133,6 +133,7 @@ def train(cfg: Config):
         _, (params, _, opt_state, _) = (
             log_manager.try_load_pretrained_checkpoint()
         )
+        opt_state = None  # TODO: hack, remove this after saving checkpoint supports DMCCheckpointState
     elif cfg.log.restore_path is not None:
         initial_step, (params, data, opt_state, mcmc_width) = (
             initalize_state(cfg, model)

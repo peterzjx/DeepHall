@@ -28,13 +28,13 @@ if __name__=="__main__":
     config.initial_energy = 0.0
     
     config.log.save_step_interval = 500
-    config.log.save_path = "../logs/dipole_laughlin_v_fit"
+    config.log.save_path = "logs/dipole_laughlin_v_fit_reload"
     config.mcmc.burn_in = 500
 
     config.log.pretrained_path = None
     # vvmc_fit.vvmc_fit(config)
-    config.log.pretrained_path = f"../logs/dipole_laughlin_v_fit/ckpt_{config.optim.iterations - 1 :06d}.npz"
+    config.log.pretrained_path = f"logs/dipole_laughlin_v_fit/ckpt_000499.npz"
     for it in range(2):
-        vvmc_fit.vvmc_reverse_fit(config)
+        # vvmc_fit.vvmc_reverse_fit(config)
         vvmc_fit.vvmc_fit(config)
     

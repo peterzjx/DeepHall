@@ -253,6 +253,7 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/python,linux,macos,windows
 
 logs/*
+tasks/*
 venv_hall/
 hall/
 

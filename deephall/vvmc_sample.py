@@ -99,6 +99,7 @@ def initalize_state(cfg: Config, model: nn.Module):
 
     return 0, dmc_state
 
+# TODO: move this function to logmanager
 def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCCheckpointState]:
     """Resore a given checkpoint.
 
@@ -119,7 +120,7 @@ def restore_checkpoint(cfg: Config, ckpt: str | Path | UPath) -> tuple[int, DMCC
     with ckpt_path.open("rb") as npf, np.load(npf, allow_pickle=True) as f:
         step = f["step"].tolist() + 1
         params = f["params"].tolist()
-        # logger.info("Restored checkpoint %s", ckpt_path)
+        logger.info("Restored checkpoint %s", ckpt_path)
         dmc_state = DMCCheckpointState(
         params=kfac_jax.utils.replicate_all_local_devices(params),
         electrons=coords,
