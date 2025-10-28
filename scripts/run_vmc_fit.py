@@ -1,14 +1,6 @@
 from deephall import Config
 from deephall.vmc_pretrain import vmc_fit
-from deephall.config import Network, NetworkType, OptimizerName, FluxType, FermionicType, PartonNetwork
-from pathlib import Path
-from deephall.types import LogPsiNetwork
-import jax
-import jax.numpy as jnp
-import kfac_jax
-from omegaconf import OmegaConf
-import logging
-import jax.numpy as jnp
+from deephall.config import Network, NetworkType, OptimizerName
 
 
 if __name__=="__main__":
@@ -48,7 +40,7 @@ if __name__=="__main__":
     
     config.log.save_step_interval = 100
     # config.log.pretrained_path = "../logs/psiformer_laughlin_fit/ckpt_001352.npz"
-    config.log.save_path = "logs/psiformer_laughlin_fit"
+    config.log.save_path = "logs/pretrain_test"
     config.mcmc.burn_in = 500
 
     vmc_fit.vmc_fit(laughlin_config, config)

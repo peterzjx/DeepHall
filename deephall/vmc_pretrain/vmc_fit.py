@@ -13,32 +13,22 @@
 # limitations under the License.
 
 import logging
-import signal
-import sys
 import time
-from argparse import ArgumentParser
 from typing import cast
 
 import jax
 import kfac_jax
-import numpy as np
-from chex import PRNGKey
-from flax import linen as nn
 from jax import numpy as jnp
-from omegaconf import OmegaConf
 
-from deephall import constants, mcmc, optimizers
-from deephall.config import Config, OptimizerName
+import deephall.vmc_pretrain.training_step as training_step
+from deephall.config import Config
 from deephall.log import LogManager, init_logging
-from deephall.types import CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
-from deephall.loss import LossMode, make_loss_fn
+from deephall.types import get_walker_state, update_from_walker_state
 from deephall.networks import make_network
 from deephall.types import LogPsiNetwork
-from deephall.train import init_guess, setup_mcmc
+from deephall.train import setup_mcmc
 from deephall.vmc_sample import initalize_state, restore_checkpoint
-from pathlib import Path
-from upath import UPath
-logger = logging.getLogger("deephall")
+from deephall.graceful_killer import GracefulKiller
 
 
 def vmc_fit(laughlin_cfg: Config, cfg: Config):
@@ -53,9 +43,9 @@ def vmc_fit(laughlin_cfg: Config, cfg: Config):
     network = cast(LogPsiNetwork, model.apply)
         
     pmap_mcmc_step, pmove = setup_mcmc(laughlin_cfg, laughlin_network)
-    print('initial setup_mcmc done', pmap_mcmc_step)
+    logging.info('initial setup_mcmc done', pmap_mcmc_step)
     if cfg.log.pretrained_path is not None:
-        print('Restoring from pretrained path:', cfg.log.pretrained_path)
+        logging.info('Restoring from pretrained path:', cfg.log.pretrained_path)
         initial_step, state = (
             initalize_state(cfg, model)
         )
@@ -63,40 +53,37 @@ def vmc_fit(laughlin_cfg: Config, cfg: Config):
             restore_checkpoint(cfg, cfg.log.pretrained_path)
         )
     else:
-        print('Training from scratch')
+        logging.info('Training from scratch')
         initial_step, state = (
             initalize_state(cfg, model)
         )
-    print('initial initalize_state done', state._fields)
-    walker_state = get_walker_state(state) #WalkerState
+    logging.info('initial initalize_state done', state._fields)
+    walker_state = get_walker_state(state)
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
 
-    opt_init, vmc_fit_training_step = optimizers.make_optimizer_vmc_fit_step(cfg, network)
+    opt_init, vmc_fit_training_step = training_step.make_training_step_vmc_fit(cfg, network)
 
+    # update opt state
     if state.opt_state is None:
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons, walker_state.lnpsi)))
 
-    logger.info("Start VVMC with %s JAX devices", jax.device_count())
+    logging.info("Start VVMC with %s JAX devices", jax.device_count())
 
 
     if initial_step == 0:
-        print("Burn-in ...")
+        logging.info("Burn-in ...")
         data = walker_state.electrons
-        print('data.shape', data.shape)
         for step in range(cfg.mcmc.burn_in):
             data = walker_state.electrons
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             new_data, new_log_wfn, pmove = pmap_mcmc_step(state.params, data, subkey, mcmc_width)
             walker_state = walker_state._replace(electrons=new_data, lnpsi=new_log_wfn)
-            
-        logger.info("Burn in DMC complete")
-        print("Done")
+        logging.info("Burn in DMC complete")
         
     state = update_from_walker_state(state, walker_state)
     data = state.electrons
-    # walker_state = walker_state._replace(electrons=data, lnpsi=new_log_wfn)
     walker_state = get_walker_state(state)
 
     last_save_time = time.time()
@@ -125,23 +112,4 @@ def vmc_fit(laughlin_cfg: Config, cfg: Config):
             ):
                 writer.force_flush()
                 log_manager.save_dmc_checkpoint(step, state)
-                # log_manager.save_checkpoint(step, state)
 
-class GracefulKiller:
-    """Capture SIGINT and SIGTERM so that we can save checkpoints before exit."""
-
-    kill_now = False
-
-    def __init__(self):
-        self.original_int = signal.signal(signal.SIGINT, self.exit_gracefully)
-        self.original_term = signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-    def exit_gracefully(self, signum, frame):
-        """Mark as exit and restore signal handlers."""
-        del signum, frame
-        if self.kill_now:  # Only handle the first signal
-            return
-        print("\r", end="")  # Clear ^C
-        signal.signal(signal.SIGINT, self.original_int)
-        signal.signal(signal.SIGTERM, self.original_term)
-        self.kill_now = True

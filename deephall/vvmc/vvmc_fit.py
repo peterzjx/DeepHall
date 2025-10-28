@@ -13,27 +13,17 @@
 # limitations under the License.
 
 import logging
-import signal
-import sys
 import time
-from argparse import ArgumentParser
 from typing import cast
 
 import jax
 import kfac_jax
-import numpy as np
-from chex import PRNGKey
-from flax import linen as nn
-from jax import numpy as jnp
-from omegaconf import OmegaConf
-
-from deephall import constants, mcmc, optimizers
 from deephall.config import Config, OptimizerName, NetworkType
 from deephall.log import LogManager, init_logging
 from deephall.velocity_networks import make_v_network
-from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
+from deephall.types import LogPsiNetwork, get_walker_state, update_from_walker_state
 from deephall import vvmc_sample
-from deephall.train import initalize_state
+import deephall.vvmc.training_step as training_step
 
 logger = logging.getLogger("deephall")
 
@@ -64,7 +54,7 @@ def vvmc_fit(cfg: Config):
     laughlin_network = cast(LogPsiNetwork, laughlin_model.apply)
     
     pmap_mcmc_step, pmove = vvmc_sample.setup_mcmc(laughlin_cfg, laughlin_network)
-    print('initial setup_mcmc done', pmap_mcmc_step)
+    logging.info('initial setup_mcmc done', pmap_mcmc_step)
     if cfg.log.pretrained_path is not None:
         initial_step, state = (
             vvmc_sample.initalize_state(cfg, model)
@@ -77,12 +67,12 @@ def vvmc_fit(cfg: Config):
             vvmc_sample.initalize_state(cfg, model)
         )
     walker_state = get_walker_state(state)
-    print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
+    logging.info('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, vvmc_fit_training_step = optimizers.make_optimizer_vvmc_fit_step(cfg, network)
+    opt_init, vvmc_fit_training_step = training_step.make_training_step_vvmc_fit(cfg, network)
 
     if (
         cfg.optim.optimizer == OptimizerName.none
@@ -95,16 +85,15 @@ def vvmc_fit(cfg: Config):
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons_xy, walker_state.v)))
 
-    logger.info("Start VVMC with %s JAX devices", jax.device_count())
+    logging.info("Start VVMC with %s JAX devices", jax.device_count())
 
     if initial_step == 0:
-        print("Burn-in ...")
+        logging.info("Burn-in ...")
         for step in range(cfg.mcmc.burn_in):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, _, _ = pmap_mcmc_step(state.params, walker_state, subkey)
             
         logger.info("Burn in DMC complete")
-        print("Done")
         
     state = update_from_walker_state(state, walker_state)
 
@@ -153,7 +142,7 @@ def vvmc_reverse_fit(cfg: Config):
     laughlin_network = cast(LogPsiNetwork, laughlin_model.apply)
     
     pmap_mcmc_step, pmove = vvmc_sample.setup_mcmc(cfg, network)
-    print('initial setup_mcmc done', pmap_mcmc_step)
+    logging.info('initial setup_mcmc done', pmap_mcmc_step)
     if cfg.log.pretrained_path is not None:
         initial_step, state = (
             vvmc_sample.initalize_state(cfg, model)
@@ -166,12 +155,11 @@ def vvmc_reverse_fit(cfg: Config):
             vvmc_sample.initalize_state(cfg, model)
         )
     walker_state = get_walker_state(state)
-    print('Initial walker_state shape:', walker_state.electrons.shape, walker_state.v.shape, walker_state.lnpsi.shape) # [device, batch, Ne, 2]
     key = jax.random.PRNGKey(cfg.seed)
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, vvmc_fit_training_step = optimizers.make_optimizer_vvmc_fit_step(cfg, laughlin_network)
+    opt_init, vvmc_fit_training_step = training_step.make_training_step_vvmc_fit(cfg, laughlin_network)
 
     if (
         cfg.optim.optimizer == OptimizerName.none
@@ -184,16 +172,15 @@ def vvmc_reverse_fit(cfg: Config):
         sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
         state = state._replace(opt_state=opt_init(state.params, subkey, (walker_state.electrons_xy, walker_state.v)))
 
-    logger.info("Start VVMC with %s JAX devices", jax.device_count())
+    logging.info("Start VVMC with %s JAX devices", jax.device_count())
 
     if initial_step == 0:
-        print("Burn-in ...")
+        logging.info("Burn-in ...")
         for step in range(cfg.mcmc.burn_in):
             sharded_key, subkey = kfac_jax.utils.p_split(sharded_key)
             walker_state, _, _ = pmap_mcmc_step(state.params, walker_state, subkey)
             
-        logger.info("Burn in DMC complete")
-        print("Done")
+        logging.info("Burn in DMC complete")
         
     state = update_from_walker_state(state, walker_state)
 

@@ -14,13 +14,13 @@
 
 
 from deephall.config import Config, OptimizerName
-from deephall.loss import make_loss_fn, make_vmc_fit_loss_fn, make_dmc_loss_fn, make_vvmc_fit_loss_fn, make_vvmc_loss_fn
+from deephall.loss import make_loss_fn, make_dmc_loss_fn
 from deephall.types import LogPsiNetwork, TrainingInit, TrainingStep
 from deephall.loss import LossMode
 
-from .adam import make_adam_training_step, make_adam_training_vvmc_fit_step, make_adam_training_vvmc_step, make_adam_training_vmc_fit_step
-from .kfac import make_kfac_training_step, make_kfac_training_dmc_step, make_kfac_training_vvmc_step
-from .none import make_inference_step, make_inference_vvmc_step
+from .adam import make_adam_training_step
+from .kfac import make_kfac_training_step, make_kfac_training_dmc_step
+from .none import make_inference_step
 from jax import numpy as jnp
 
 def make_optimizer_step(
@@ -35,25 +35,6 @@ def make_optimizer_step(
         return make_inference_step(loss_grad_fn)
     raise ValueError(f"Optimizer {cfg.optim.optimizer} is not implemented!")
 
-def make_optimizer_vmc_fit_step(
-    cfg: Config, network: LogPsiNetwork
-) -> tuple[TrainingInit, TrainingStep]:
-    loss_grad_fn = make_vmc_fit_loss_fn(network, cfg.system, mode=LossMode.FUNCTION_OVLP) # loss_grad_fn(param, [electrons, v])
-    assert cfg.optim.optimizer == OptimizerName.adam
-    return make_adam_training_vmc_fit_step(cfg.optim.adam, loss_grad_fn)
-
-def make_optimizer_vvmc_step(
-    cfg: Config, network: LogPsiNetwork
-) -> tuple[TrainingInit, TrainingStep]:
-    loss_grad_fn = make_vvmc_loss_fn(network, cfg.system)
-    # assert cfg.optim.optimizer == OptimizerName.adam #Remove once kfac is built
-    if cfg.optim.optimizer == OptimizerName.none:
-        return make_inference_vvmc_step(loss_grad_fn)
-    if cfg.optim.optimizer == OptimizerName.adam:
-        return make_adam_training_vvmc_step(cfg.optim.adam, loss_grad_fn)
-    if cfg.optim.optimizer == OptimizerName.kfac:
-        return make_kfac_training_vvmc_step(cfg.optim.kfac, loss_grad_fn)
-
 
 def make_optimizer_dmc_step(
     cfg: Config, network: LogPsiNetwork
@@ -61,10 +42,3 @@ def make_optimizer_dmc_step(
     loss_grad_fn = make_dmc_loss_fn(network, cfg.system)
     assert cfg.optim.optimizer == OptimizerName.kfac
     return make_kfac_training_dmc_step(cfg.optim.kfac, loss_grad_fn)
-
-def make_optimizer_vvmc_fit_step(
-    cfg: Config, network: LogPsiNetwork
-) -> tuple[TrainingInit, TrainingStep]:
-    loss_grad_fn = make_vvmc_fit_loss_fn(network, cfg.system, mode=LossMode.FUNCTION_OVLP) # loss_grad_fn(param, [electrons, v])
-    assert cfg.optim.optimizer == OptimizerName.adam
-    return make_adam_training_vvmc_fit_step(cfg.optim.adam, loss_grad_fn)

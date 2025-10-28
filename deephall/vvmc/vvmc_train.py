@@ -13,28 +13,21 @@
 # limitations under the License.
 
 import logging
-import signal
-import sys
 import time
-from argparse import ArgumentParser
 from typing import cast
 
 import jax
 import kfac_jax
-import numpy as np
-from chex import PRNGKey
-from flax import linen as nn
 from jax import numpy as jnp
-from omegaconf import OmegaConf
 
-from deephall import constants, mcmc, optimizers
 from deephall.config import Config, OptimizerName
 from deephall.log import LogManager, init_logging
-from deephall.loss import LossMode, make_loss_fn
 from deephall.velocity_networks import make_v_network
-from deephall.types import LogPsiNetwork, CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
+from deephall.types import LogPsiNetwork, get_walker_state, update_from_walker_state
 from deephall import vvmc_sample
 from deephall.train import GracefulKiller
+from deephall.optimizers.kfac import GRAPH_PATTERNS
+import deephall.vvmc.training_step as training_step
 
 logger = logging.getLogger("deephall")
 
@@ -66,7 +59,7 @@ def vvmc_train(cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, vvmc_training_step = optimizers.make_optimizer_vvmc_step(cfg, network)
+    opt_init, vvmc_training_step = training_step.make_training_step_vvmc(cfg, network, GRAPH_PATTERNS)
 
     if (
         cfg.optim.optimizer == OptimizerName.none

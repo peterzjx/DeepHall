@@ -1,15 +1,6 @@
 from deephall import Config
 from deephall.vvmc import vvmc_fit
 from deephall.config import Network, NetworkType, OptimizerName
-from pathlib import Path
-from deephall.types import LogPsiNetwork
-import jax
-import jax.numpy as jnp
-import kfac_jax
-from omegaconf import OmegaConf
-import logging
-import jax.numpy as jnp
-
 
 if __name__=="__main__":
     config = Config(network=Network(
@@ -33,7 +24,7 @@ if __name__=="__main__":
 
     config.log.pretrained_path = None
     # vvmc_fit.vvmc_fit(config)
-    config.log.pretrained_path = f"logs/dipole_laughlin_v_fit/ckpt_000499.npz"
+    # config.log.pretrained_path = f"logs/dipole_laughlin_v_fit/ckpt_000499.npz"
     for it in range(2):
         # vvmc_fit.vvmc_reverse_fit(config)
         vvmc_fit.vvmc_fit(config)

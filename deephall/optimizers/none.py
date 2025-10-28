@@ -33,21 +33,3 @@ def make_inference_step(loss_grad_fn) -> tuple[TrainingInit, TrainingStep]:
         return (CheckpointState(params, data, opt_state, mcmc_width), stats)
 
     return init, step
-
-def make_inference_vvmc_step(loss_grad_fn) -> tuple[TrainingInit, TrainingStep]:
-    @constants.pmap
-    def init(params, key, data):
-        del params, key, data
-        return None
-
-    @constants.pmap
-    def step(state: DMCCheckpointState, key: PRNGKey):
-        del key
-        params, electron, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state = state
-        stats, _ = loss_grad_fn(params, (electrons_xy, electrons_xy_move))
-        return (
-            DMCCheckpointState(params, electron, electrons_xy, electrons_xy_move, d_metric, last_v, v, lnpsi, local_energy, weights, dmc_mean_energy, dmc_run_step, opt_state),
-            stats
-            )
-
-    return init, step

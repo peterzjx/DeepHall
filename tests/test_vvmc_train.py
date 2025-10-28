@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 import numpy as np
 from deephall import dmc_sample, Config
-from deephall import constants, mcmc, optimizers
+from deephall import constants, mcmc
 from deephall.config import Network, NetworkType, System, PsiformerNetwork,Network, NetworkType, FluxType, FermionicType, PartonNetwork, OptimizerName
 from deephall.types import CheckpointState, DMCCheckpointState, WalkerState, get_walker_state, update_from_walker_state
 from pathlib import Path
@@ -24,6 +24,8 @@ from pytest import CaptureFixture
 import logging
 from deephall.log import LogManager, init_logging
 from deephall import vvmc_sample
+from deephall.optimizers.kfac import GRAPH_PATTERNS
+import deephall.vvmc.training_step as training_step
 logger = logging.getLogger("deephall")
 @pytest.fixture
 def simple_cfg():
@@ -76,7 +78,7 @@ def test_vvmc_train(simple_cfg: Config):
     sharded_key = kfac_jax.utils.make_different_rng_key_on_all_devices(key)
     energy_history = None
 
-    opt_init, vvmc_training_step = optimizers.make_optimizer_vvmc_step(simple_cfg, network)
+    opt_init, vvmc_training_step = training_step.make_training_step_vvmc(simple_cfg, network, GRAPH_PATTERNS)
 
     if (
         simple_cfg.optim.optimizer == OptimizerName.none
