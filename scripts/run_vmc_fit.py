@@ -12,8 +12,8 @@ import jax.numpy as jnp
 
 
 if __name__=="__main__":
-    Ne = 4
-    twoQ = 9
+    Ne = 3
+    twoQ = 6
 
     laughlin_config = Config(network=Network(
                 type=NetworkType.laughlin
@@ -48,7 +48,7 @@ if __name__=="__main__":
     
     config.log.save_step_interval = 100
     # config.log.pretrained_path = "../logs/psiformer_laughlin_fit/ckpt_001352.npz"
-    config.log.save_path = "../logs/psiformer_laughlin_fit"
+    config.log.save_path = "logs/psiformer_laughlin_fit"
     config.mcmc.burn_in = 500
 
     vmc_fit.vmc_fit(laughlin_config, config)

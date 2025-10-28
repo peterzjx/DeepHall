@@ -291,7 +291,7 @@ def make_vmc_fit_loss_fn(
         predictions = jax.vmap(lambda x: network(params, x))(x_data)
         # jax.debug.print("Predictions v.s. Target: {} v.s. {}", predictions[0], y_targets[0])
         # Compute MSE between predictions and targets
-        squared_errors = jnp.abs(predictions - y_targets)**2
+        squared_errors = 1 - jnp.cos(jnp.imag(predictions - y_targets))
         loss_value = jnp.mean(squared_errors)
         
         # Compute gradients

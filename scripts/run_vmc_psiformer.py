@@ -10,11 +10,11 @@ for Ne in [4]:
     twoQ = 2*Ne+1
     for kappa in [1.0]:
         config = Config(network=Network(
-            type=NetworkType.psiformer,
-            # parton=PartonNetwork(
-            #     fermionic_type=FermionicType.pfaffian,
-            #     flux_type=FluxType.symmetric_mlp_network
-            # )
+            type=NetworkType.parton,
+            parton=PartonNetwork(
+                fermionic_type=FermionicType.pfaffian,
+                flux_type=FluxType.symmetric_mlp_network
+            )
         ))
         config.system.interaction_strength = kappa
         config.system.nspins = (Ne, 0)
@@ -24,6 +24,6 @@ for Ne in [4]:
         config.optim.iterations  = 1000
         config.batch_size = 128
         config.mcmc.width = 0.3
-        config.log.pretrained_path = f"logs/from_pretrain_psiformer_4_kappa_1.0/ckpt_000204.npz"
-        config.log.save_path = f"logs/from_pretrain_psiformer_{Ne}_kappa_{kappa}_2"
+        config.log.pretrained_path = f"logs/psiformer_laughlin_fit/ckpt_019999.npz"
+        config.log.save_path = f"logs/from_pretrain_psiformer_{Ne}_kappa_{kappa}"
         train(config)
