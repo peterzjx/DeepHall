@@ -1,6 +1,6 @@
 from deephall import Config
 from deephall.vmc_pretrain import vmc_fit
-from deephall.config import Network, NetworkType, OptimizerName
+from deephall.config import Network, NetworkType, OptimizerName, PartonNetwork, FermionicType, FluxType
 
 
 if __name__=="__main__":
@@ -17,28 +17,36 @@ if __name__=="__main__":
     laughlin_config.optim.adam.gradient_accumulation_steps = 4
     laughlin_config.mcmc.use_vmc_pretrain = True
     
+    # config = Config(network=Network(
+    #         type=NetworkType.psiformer
+    #     ))
     config = Config(network=Network(
-            type=NetworkType.psiformer,
-            # parton=PartonNetwork(
-            #     fermionic_type=FermionicType.pfaffian,
-            #     flux_type=FluxType.original_jastrow
-            # )
+            type=NetworkType.module_phase,
         ))
-    config.seed = 564
+    # config = Config(network=Network(
+    #         type=NetworkType.parton,
+    #         parton=PartonNetwork(
+    #             fermionic_type=FermionicType.pfaffian,
+    #             flux_type=FluxType.original_jastrow
+    #         )
+    #     ))
+    config.seed = 128
     config.system.nspins = (Ne, 0)
     config.system.flux = twoQ
     config.system.tau = 0.0001
     config.system.interaction_strength = 1.0
     config.optim.iterations = 20000
     config.optim.optimizer = OptimizerName.adam
-    config.optim.adam.gradient_accumulation_steps = 4
-    config.optim.adam.lr.rate = 1e-5
-    config.batch_size = 1024
+    config.optim.adam.gradient_accumulation_steps = 2
+    config.optim.adam.lr.rate = 1e-6
+    config.batch_size = 2048
     config.mcmc.use_vmc_pretrain = True
     config.mcmc.width = 0.3
     config.initial_energy = 0.0
     
     config.log.save_step_interval = 100
+    config.log.save_coords = True
+    config.log.save_coords_step_interval = 100
     # config.log.pretrained_path = "../logs/psiformer_laughlin_fit/ckpt_001352.npz"
     config.log.save_path = "logs/pretrain_test"
     config.mcmc.burn_in = 500

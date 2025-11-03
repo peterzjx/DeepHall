@@ -19,10 +19,11 @@ from typing import cast
 import jax
 import kfac_jax
 from jax import numpy as jnp
+import numpy as np
 
 import deephall.vmc_pretrain.training_step as training_step
 from deephall.config import Config
-from deephall.log import LogManager, init_logging
+from deephall.log import LogManager, init_logging, dedup_pytree
 from deephall.types import get_walker_state, update_from_walker_state
 from deephall.networks import make_network
 from deephall.types import LogPsiNetwork
@@ -102,6 +103,32 @@ def vmc_fit(laughlin_cfg: Config, cfg: Config):
                 loss=f"{stats['loss'][0]}",   
             )
             current_time = time.time()
+
+            # Save coordinates independently if configured to do so. This allows
+            # saving coords every N iterations even when checkpoints are less
+            # frequent.
+            try:
+                save_coords_enabled = getattr(cfg.log, "save_coords", False)
+                if save_coords_enabled:
+                    save_coords_interval = getattr(cfg.log, "save_coords_step_interval", None)
+                    if save_coords_interval is None:
+                        save_coords_interval = cfg.log.save_step_interval
+                    if save_coords_interval is not None and save_coords_interval > 0:
+                        if ((step + 1) % save_coords_interval == 0) or (
+                            step == cfg.optim.iterations - 1
+                        ) or killer.kill_now:
+                            coords = dedup_pytree(state.electrons)
+                            coords = jax.device_get(coords)
+                            loss_val = float(jax.device_get(stats["loss"])[0])
+                            coords_path = log_manager.save_path / f"coords_{step:06d}.npz"
+                            with coords_path.open("wb") as f:
+                                np.savez_compressed(f, loss=loss_val, electrons=np.asarray(coords))
+                            logging.info("Saved coordinates and loss to %s", coords_path)
+            except Exception as e:
+                logging.warning("Failed saving coordinates: %s", e)
+
+            # Checkpoint save uses both a time interval and a step interval, or
+            # triggers at the final step / graceful kill.
             if (
                 (
                     current_time - last_save_time > cfg.log.save_time_interval
@@ -112,4 +139,6 @@ def vmc_fit(laughlin_cfg: Config, cfg: Config):
             ):
                 writer.force_flush()
                 log_manager.save_dmc_checkpoint(step, state)
+                # update last_save_time so time-based interval is enforced
+                last_save_time = current_time
 

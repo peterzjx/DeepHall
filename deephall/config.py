@@ -91,6 +91,7 @@ class NetworkType(StrEnum):
     laughlin = "laughlin"
     dipole_laughlin= "dipole_laughlin"
     parton = "parton"
+    module_phase = "module_phase"
     laughlin_v = "laughlin_v"
     super_laughlin_v = "super_laughlin_v"
     dipole_laughlin_v = "dipole_laughlin_v"
@@ -116,6 +117,12 @@ class PartonNetwork:
     fermionic_type: FermionicType = FermionicType.pfaffian
     flux_type: FluxType = FluxType.symmetric_mlp_network
 
+@dataclass
+class ModulePhaseNetwork:
+    num_heads: int = 4
+    heads_dim: int = 64
+    num_layers: int = 2
+    determinants: int = 1
 
 @dataclass
 class PsiformerNetwork:
@@ -131,6 +138,7 @@ class Network:
     orbital: OrbitalType = OrbitalType.full
     psiformer: PsiformerNetwork = field(default_factory=PsiformerNetwork)
     parton: PartonNetwork = field(default_factory=PartonNetwork)
+    module: ModulePhaseNetwork = field(default_factory=ModulePhaseNetwork)
 
 @dataclass
 class VNetwork:
@@ -230,6 +238,22 @@ class Log:
     """
 
     save_step_interval: int = 1000
+    """Checkpoints are saved only at steps that are multiples of this value,
+    and only if the `save_time_interval` has also elapsed.
+
+    Note: set `save_coords` to True to enable saving coordinates and loss
+    during training. Control the frequency with `save_coords_step_interval`.
+    If `save_coords_step_interval` is None, `save_step_interval` will be used.
+    """
+
+    save_coords: bool = False
+    """Enable saving coordinates and loss to compressed files alongside checkpoints."""
+
+    save_coords_step_interval: int | None = None
+    """If set, controls how often (in steps) coordinates are saved. If None,
+    falls back to `save_step_interval`. If set to a non-positive value, coords
+    saving is disabled.
+    """
     """Checkpoints are saved only at steps that are multiples of this value.
 
     Checkpoints are saved only at steps that are multiples of this value,

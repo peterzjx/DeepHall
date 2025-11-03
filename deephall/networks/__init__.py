@@ -56,3 +56,10 @@ def make_network(system: System, network: Network) -> nn.Module:
             heads_dim=network.psiformer.heads_dim,
             orbital_type=network.orbital,
         )
+    
+    if network.type == NetworkType.module_phase:
+        from deephall.networks.module_phase import ModulePhase
+        return ModulePhase(
+            Q=Q,
+            nspins=system.nspins,
+        )
