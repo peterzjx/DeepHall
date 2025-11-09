@@ -57,9 +57,9 @@ def make_network(system: System, network: Network) -> nn.Module:
             orbital_type=network.orbital,
         )
     
-    if network.type == NetworkType.module_phase:
-        from deephall.networks.module_phase import ModulePhase
-        return ModulePhase(
+    if network.type == NetworkType.modulus_phase:
+        from deephall.networks.modulus_phase import ModulusPhase
+        return ModulusPhase(
             Q=Q,
             nspins=system.nspins,
         )

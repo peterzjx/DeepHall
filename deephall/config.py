@@ -91,7 +91,7 @@ class NetworkType(StrEnum):
     laughlin = "laughlin"
     dipole_laughlin= "dipole_laughlin"
     parton = "parton"
-    module_phase = "module_phase"
+    modulus_phase = "modulus_phase"
     laughlin_v = "laughlin_v"
     super_laughlin_v = "super_laughlin_v"
     dipole_laughlin_v = "dipole_laughlin_v"
@@ -118,7 +118,7 @@ class PartonNetwork:
     flux_type: FluxType = FluxType.symmetric_mlp_network
 
 @dataclass
-class ModulePhaseNetwork:
+class ModulusPhaseNetwork:
     num_heads: int = 4
     heads_dim: int = 64
     num_layers: int = 2
@@ -138,7 +138,7 @@ class Network:
     orbital: OrbitalType = OrbitalType.full
     psiformer: PsiformerNetwork = field(default_factory=PsiformerNetwork)
     parton: PartonNetwork = field(default_factory=PartonNetwork)
-    module: ModulePhaseNetwork = field(default_factory=ModulePhaseNetwork)
+    module: ModulusPhaseNetwork = field(default_factory=ModulusPhaseNetwork)
 
 @dataclass
 class VNetwork:

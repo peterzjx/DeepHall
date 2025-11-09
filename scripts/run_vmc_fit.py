@@ -21,7 +21,7 @@ if __name__=="__main__":
     #         type=NetworkType.psiformer
     #     ))
     config = Config(network=Network(
-            type=NetworkType.module_phase,
+            type=NetworkType.modulus_phase,
         ))
     # config = Config(network=Network(
     #         type=NetworkType.parton,
@@ -37,9 +37,9 @@ if __name__=="__main__":
     config.system.interaction_strength = 1.0
     config.optim.iterations = 20000
     config.optim.optimizer = OptimizerName.adam
-    config.optim.adam.gradient_accumulation_steps = 2
-    config.optim.adam.lr.rate = 1e-6
-    config.batch_size = 2048
+    config.optim.adam.gradient_accumulation_steps = 10
+    config.optim.adam.lr.rate = 1e-5
+    config.batch_size = 4096 * 2
     config.mcmc.use_vmc_pretrain = True
     config.mcmc.width = 0.3
     config.initial_energy = 0.0
