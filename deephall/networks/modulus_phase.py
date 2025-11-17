@@ -14,13 +14,13 @@ class SymmetricMLPNetwork(nn.Module):
         theta, phi = electrons[..., 0], electrons[..., 1]  # [..., N], [..., N]
         uv = jnp.stack([jnp.cos(theta), jnp.cos(phi / 2)], axis= -1)
         # three MLP layers
-        feature = nn.Dense(32)(uv)  # [..., N, 64]
+        feature = nn.Dense(64)(uv)  # [..., N, 64]
         feature = nn.LayerNorm(epsilon=1e-5)(feature)
         feature = nn.sigmoid(feature)
         feature = nn.Dense(128)(feature)  # [..., N, 128]
         feature = nn.LayerNorm(epsilon=1e-5)(feature)
         feature = nn.sigmoid(feature)
-        feature = nn.Dense(32)(feature)  # [..., N, 64]
+        feature = nn.Dense(64)(feature)  # [..., N, 64]
         feature = nn.LayerNorm(epsilon=1e-5)(feature)
         feature = nn.sigmoid(feature)
         feature = jnp.max(feature, axis=-2)  # [..., 64]
@@ -119,11 +119,11 @@ class ModulusPhase(nn.Module):
         ln_laughlin = 3 / 2 * jnp.log(jastrow)
         # modulus = jnp.real(ln_laughlin)
         phase = self.phase_network(electrons)
-        # phase = ln_laughlin.imag
-        # modulus = self.modulus_network(electrons)
+        modulus = self.modulus_network(electrons)
+        modulus = modulus.squeeze(-1)
         
         modulus = ln_laughlin.real
-        phase = ln_laughlin.imag
+        phase = 0.5 * (ln_laughlin.imag) + 0.5 * phase
         return modulus + 1j * phase
         
     

@@ -222,6 +222,7 @@ class LogManager:
     def try_load_pretrained_checkpoint(self) -> tuple[int, CheckpointState] | None:
         """Try to load pretrained checkpoints from `pretrained_path`."""
         if not self.pretrained_path.exists():
+            jax.debug.print("123123")
             return None
         if self.pretrained_path.is_file():
             return self.restore_checkpoint(self.pretrained_path, keep_opt_state=False)

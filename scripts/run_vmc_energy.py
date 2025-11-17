@@ -17,5 +17,6 @@ for Ne in [4]:
         config.optim.iterations  = 10000
         config.batch_size = 512
         config.mcmc.width = 0.5
+        config.log.pretrained_path = "logs/pretrain_test/ckpt_007104.npz"
         config.log.save_path = f"logs/modulus_phase_energy_N{Ne}_kappa{kappa}_{timestamp}"
         train(config)
